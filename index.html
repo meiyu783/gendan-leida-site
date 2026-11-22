@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跟单雷达 · 履约风险</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121a23; --panel2:#0f151c; --line:#1e2a36;
+    --text:#e6edf3; --dim:#8b98a5; --dim2:#5c6b7a;
+    --red:#ff4d4f; --amber:#ffb020; --green:#3dd68c; --accent:#4a9eff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+
+  /* header */
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{
+    width:34px;height:34px;border-radius:9px;flex:0 0 auto;
+    background:radial-gradient(circle at 30% 30%,#1b3a5c,#0d1a26);
+    border:1px solid #24425f;position:relative;overflow:hidden;
+  }
+  .logo::before{
+    content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;
+    background:var(--green);transform:translate(-50%,-50%);
+    box-shadow:0 0 0 6px rgba(61,214,140,.12),0 0 14px rgba(61,214,140,.6);
+  }
+  .logo::after{
+    content:"";position:absolute;inset:0;border-radius:50%;
+    border:1px solid rgba(61,214,140,.18);margin:7px;
+  }
+  h1{font-size:17px;font-weight:600;letter-spacing:.2px}
+  .sub{font-size:12px;color:var(--dim2);margin-top:2px;font-family:var(--mono)}
+  .meta{text-align:right;font-family:var(--mono);font-size:11px;color:var(--dim2);line-height:1.8}
+  .meta b{color:var(--dim);font-weight:500}
+
+  /* stat strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:24px}
+  .stat{background:var(--panel2);padding:16px 18px}
+  .stat .k{font-size:11px;color:var(--dim2);letter-spacing:.5px;margin-bottom:8px}
+  .stat .v{font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-.4px}
+  .stat .v small{font-size:12px;color:var(--dim2);font-weight:400;margin-left:3px}
+  .v.red{color:var(--red)} .v.amber{color:var(--amber)} .v.green{color:var(--green)}
+  .v.money{font-size:22px}
+
+  /* tabs */
+  nav{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--line)}
+  nav button{
+    background:none;border:none;color:var(--dim2);font:inherit;font-size:13px;
+    padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;
+    transition:color .15s,border-color .15s;
+  }
+  nav button:hover{color:var(--dim)}
+  nav button.on{color:var(--text);border-bottom-color:var(--accent)}
+
+  /* order cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:14px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:16px 16px 14px;cursor:pointer;position:relative;overflow:hidden;
+    transition:border-color .15s,transform .12s,background .15s;
+  }
+  .card:hover{border-color:#2c3d4e;background:#151e28;transform:translateY(-1px)}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+  .card.red::before{background:var(--red)}
+  .card.yellow::before{background:var(--amber)}
+  .card.green::before{background:var(--green)}
+  .card .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .card .id{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.3px}
+  .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .dot.red{background:var(--red);box-shadow:0 0 0 4px rgba(255,77,79,.14);animation:pulse 2s infinite}
+  .dot.yellow{background:var(--amber);box-shadow:0 0 0 4px rgba(255,176,32,.12)}
+  .dot.green{background:var(--green);box-shadow:0 0 0 4px rgba(61,214,140,.1)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .card h3{font-size:15px;font-weight:600;margin-bottom:3px}
+  .card .prod{font-size:12px;color:var(--dim2);margin-bottom:14px}
+  .card .row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .card .label{font-size:11px;color:var(--dim2)}
+  .card .amt{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.3px}
+  .card .delay{font-family:var(--mono);font-size:12px}
+  .delay.neg{color:var(--red)} .delay.pos{color:var(--dim2)}
+  .card .foot{
+    margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);
+    font-size:12px;color:var(--dim);display:flex;justify-content:space-between;gap:8px;
+  }
+  .badge{font-size:10px;padding:2px 7px;border-radius:5px;letter-spacing:.4px;font-weight:600}
+  .badge.red{background:rgba(255,77,79,.13);color:var(--red)}
+  .badge.yellow{background:rgba(255,176,32,.12);color:var(--amber)}
+  .badge.green{background:rgba(61,214,140,.1);color:var(--green)}
+
+  /* detail */
+  .back{
+    background:none;border:1px solid var(--line);color:var(--dim);font:inherit;font-size:12px;
+    padding:7px 13px;border-radius:8px;cursor:pointer;margin-bottom:20px;
+  }
+  .back:hover{border-color:#2c3d4e;color:var(--text)}
+  .detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:26px}
+  .detail-head h2{font-size:22px;font-weight:600;letter-spacing:-.2px}
+  .detail-head .who{font-size:13px;color:var(--dim);margin-top:4px}
+  .exposure{text-align:right}
+  .exposure .k{font-size:11px;color:var(--dim2);margin-bottom:6px}
+  .exposure .v{font-family:var(--mono);font-size:32px;font-weight:600;color:var(--red);letter-spacing:-1px}
+
+  .timeline{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:44px 70px 50px;margin-bottom:16px;position:relative;
+  }
+  .tl-track{position:relative;height:4px;background:#1b2733;border-radius:2px;margin:18px 0}
+  .tl-fill{position:absolute;top:0;bottom:0;left:0;background:linear-gradient(90deg,#2a5a8a,#4a9eff);border-radius:2px}
+  .tl-over{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,rgba(255,77,79,.55),var(--red));border-radius:2px}
+  .tl-pt{position:absolute;top:50%;transform:translate(-50%,-50%);width:0}
+  .tl-pt .pin{position:absolute;left:-5.5px;top:-5.5px;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg)}
+  .tl-pt .lb{position:absolute;top:15px;left:0;transform:translateX(-50%);
+  .tl-pt.first .lb,.tl-pt.first .dt{transform:none;left:-6px;text-align:left}
+  .tl-pt.last .lb,.tl-pt.last .dt{transform:none;left:auto;right:-6px;text-align:right}
+    font-size:10px;color:var(--dim2);white-space:nowrap;letter-spacing:.4px}
+  .tl-pt .dt{position:absolute;top:32px;left:0;transform:translateX(-50%);
+    font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+  .tl-pt.etd .pin{background:var(--accent)}
+  .tl-pt.promised .pin{background:var(--green);box-shadow:0 0 0 4px rgba(61,214,140,.15)}
+  .tl-pt.eta .pin{background:var(--red);box-shadow:0 0 0 4px rgba(255,77,79,.15)}
+
+  .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .fact{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:16px}
+  .fact .k{font-size:11px;color:var(--dim2);letter-spacing:.4px;margin-bottom:9px}
+  .fact .v{font-family:var(--mono);font-size:19px;font-weight:600}
+  .fact .n{font-size:11px;color:var(--dim2);margin-top:5px;line-height:1.5}
+
+  .why{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--red);
+    border-radius:11px;padding:18px 20px;margin-bottom:12px}
+  .why .k{font-size:11px;color:var(--dim2);letter-spacing:.5px;margin-bottom:8px}
+  .why .v{font-size:14px;line-height:1.7}
+  .act{background:rgba(74,158,255,.05);border:1px solid rgba(74,158,255,.2);
+    border-radius:11px;padding:18px 20px}
+  .act .k{font-size:11px;color:#6fa9e0;letter-spacing:.5px;margin-bottom:8px}
+  .act .v{font-size:14px;line-height:1.7;color:#cfe2f5}
+
+  /* 国别单证提示 */
+  .pol{background:rgba(255,176,32,.04);border:1px solid rgba(255,176,32,.18);
+    border-radius:11px;padding:16px 20px;margin-top:12px}
+  .pol .k{font-size:11px;color:#d9a24a;letter-spacing:.5px;margin-bottom:10px;
+    display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .pol .k em{font-style:normal;font-size:10px;color:var(--dim2)}
+  .pol-item{padding:10px 0;border-top:1px solid rgba(255,176,32,.12)}
+  .pol-item:first-of-type{border-top:0;padding-top:0}
+  .pol-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:5px}
+  .pol-cat{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,176,32,.14);
+    color:#d9a24a;white-space:nowrap}
+  .pol-doc{font-size:13px;color:var(--text);font-weight:600}
+  .pol-om{font-size:12.5px;line-height:1.65;color:#c9d4e0}
+  .pol-om b{color:var(--amber);font-weight:600}
+  .pol-act{font-size:12.5px;line-height:1.6;color:var(--dim);margin-top:4px}
+  .pol-low{font-size:10px;color:var(--dim2);margin-top:6px}
+  .pol-tag{font-size:10px;padding:1px 6px;border-radius:4px;
+    background:rgba(160,170,185,.14);color:var(--dim2);white-space:nowrap}
+  .pol.cn{background:rgba(74,158,255,.045);border-color:rgba(74,158,255,.2);
+    margin-top:12px;margin-bottom:0}
+  .pol.cn .k{color:#6fa9e0}
+  .pol.cn .k em{color:var(--dim2)}
+  .pol.cn .pol-item{border-top-color:rgba(74,158,255,.13)}
+  .pol.cn .pol-cat{background:rgba(74,158,255,.15);color:#8fc0ea}
+  .pol.cn .pol-om b{color:#8fc0ea}
+
+  /* brief */
+  .brief-head{margin-bottom:24px}
+  .brief-head h2{font-size:22px;font-weight:600;margin-bottom:6px}
+  .brief-head p{font-size:13px;color:var(--dim)}
+  .brief-list{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+  .brief-item{
+    background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--red);
+    border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:18px;
+  }
+  .brief-item .num{
+    font-family:var(--mono);font-size:13px;color:var(--dim2);width:22px;flex:0 0 auto;
+  }
+  .brief-item .body{flex:1;min-width:0}
+  .brief-item .t{font-size:14px;font-weight:500;margin-bottom:3px}
+  .brief-item .s{font-size:12px;color:var(--dim)}
+  .brief-item .money{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--red);flex:0 0 auto}
+  .brief-total{
+    background:var(--panel2);border:1px solid var(--line);border-radius:11px;
+    padding:20px 24px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .brief-total .k{font-size:12px;color:var(--dim2)}
+  .brief-total .v{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--red);letter-spacing:-.5px}
+
+  /* --- 简报 · 巡检分组（agent 记忆） --- */
+  .bucket{margin-bottom:24px}
+  .bucket-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .bh-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .bh-dot.red{background:var(--red);box-shadow:0 0 0 3px rgba(255,77,79,.15)}
+  .bh-dot.amber{background:var(--amber)}
+  .bh-dot.gray{background:#5a6b7d}
+  .bh-dot.green{background:var(--green)}
+  .bh-t{font-size:13px;font-weight:600;letter-spacing:.02em}
+  .bh-n{font-family:var(--mono);font-size:11px;color:var(--dim);background:var(--panel2);padding:1px 7px;border-radius:10px}
+  .bh-hint{font-size:11px;color:var(--dim2);margin-left:auto}
+  .bucket-item{
+    display:flex;align-items:center;gap:12px;padding:11px 14px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    margin-bottom:6px;cursor:pointer;transition:border-color .15s,background .15s;
+  }
+  .bucket-item:hover{border-color:#2a3b4d}
+  .bi-body{flex:1;min-width:0}
+  .bi-body .t{font-size:13px;font-weight:500}
+  .bi-body .s{font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bi-money{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--red);flex:0 0 auto}
+
+  .empty{text-align:center;color:var(--dim2);padding:60px 0;font-size:13px}
+  .hidden{display:none}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);
+    font-size:11px;color:var(--dim2);display:flex;justify-content:space-between;font-family:var(--mono)}
+/* ---- 贴邮件 ---- */
+.paste-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.paste-wrap{grid-template-columns:1fr}}
+.paste-pane{background:#121a23;border:1px solid #1b2733;border-radius:10px;padding:14px}
+.pane-head{font-size:13px;color:#8fa3b8;margin-bottom:10px}
+#paste-body{width:100%;box-sizing:border-box;min-height:250px;background:#0e1620;border:1px solid #1b2733;
+  border-radius:8px;color:#dbe6f0;padding:12px;font-family:ui-monospace,Consolas,monospace;
+  font-size:12px;line-height:1.7;resize:vertical}
+.paste-samples{margin:10px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{background:#16222f;border:1px solid #24344a;color:#c6d4e2;border-radius:14px;
+  padding:3px 10px;font-size:11px;cursor:pointer}
+.chip:hover{border-color:#4a9eff}
+.paste-actions{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.btn-primary{background:#4a9eff;color:#fff;border:0;border-radius:8px;padding:8px 16px;
+  font-size:13px;cursor:pointer}
+.btn-primary:hover{background:#3d8ce0}
+.btn-ghost{background:transparent;color:#8fa3b8;border:1px solid #24344a;border-radius:8px;
+  padding:8px 14px;font-size:13px;cursor:pointer}
+.empty{color:#5d7185;font-size:13px;padding:40px 0;text-align:center}
+.parse-head{display:flex;justify-content:space-between;align-items:baseline;
+  gap:10px;margin-bottom:12px;font-size:12px;flex-wrap:wrap}
+.parse-src{color:#5d7185}
+.hint{font-size:11px;color:#5d7185}
+.warn{color:#ffb020}.ok{color:#3dd68c}
+.whole-note{background:#2a1f0e;border:1px solid #6b4a12;color:#ffcf7a;border-radius:8px;
+  padding:8px 10px;font-size:12px;line-height:1.6;margin-bottom:12px}
+.field{border:1px solid #1b2733;border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.field.row-amb{border-color:#6b4a12;background:#1d1708}
+.field.row-miss{border-color:#4a1f1f;background:#1e1010}
+.field-k{display:flex;justify-content:space-between;align-items:center;
+  font-size:12px;color:#8fa3b8;margin-bottom:6px}
+.tag{font-size:10px;padding:1px 7px;border-radius:9px}
+.tag-amb{background:#3a2a08;color:#ffcf7a}
+.tag-miss{background:#3a1414;color:#ff8f8f}
+.tag-ok{background:#0d2a1c;color:#6ee7a8}
+.field-v input{width:100%;box-sizing:border-box;background:#0e1620;border:1px solid #24344a;
+  border-radius:6px;color:#dbe6f0;padding:6px 8px;
+  font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.field-why{font-size:11px;color:#ffcf7a;margin-top:6px;line-height:1.5}
+.tag-ai{color:#4a9eff;border-color:#264764;background:#0e1822}
+.tag-rule{color:#8b98a5;border-color:#2a3540;background:#131a22}
+.ai-how{margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.ai-how summary{cursor:pointer;padding:11px 14px;font-size:12px;color:#4a9eff;list-style:none;user-select:none}
+.ai-how summary::-webkit-details-marker{display:none}
+.ai-how summary::before{content:"\25B8 ";color:var(--dim2)}
+.ai-how[open] summary::before{content:"\25BE "}
+.ah-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;padding:2px 16px 10px}
+.ah-grid>div{display:flex;gap:10px;font-size:11px;align-items:baseline;min-width:0}
+.ah-grid b{color:var(--dim2);font-weight:400;flex:0 0 46px}
+.ah-grid span{color:#c6d4e1;font-family:var(--mono);word-break:break-all}
+.ah-raw{margin:6px 16px;padding:10px 12px;background:#080d12;border:1px solid var(--line);border-radius:6px;font-family:var(--mono);font-size:11px;line-height:1.55;color:#93a9bf;white-space:pre-wrap;word-break:break-all;max-height:190px;overflow:auto}
+.ah-note{margin:10px 16px 14px;font-size:11px;color:var(--dim2);line-height:1.65}
+/* ---- 三天回放 ---- */
+.rp{background:linear-gradient(180deg,rgba(74,158,255,.055),rgba(18,26,35,0) 78%),var(--panel);
+  border:1px solid #1c2f45;border-radius:12px;padding:18px 20px 16px;margin-bottom:16px}
+.rp-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.rp-t{font-size:14px;font-weight:700;letter-spacing:.08em;color:#6fa9e0}
+.rp-hint{font-size:11.5px;color:var(--dim2)}
+.rp-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rp-chip{flex:0 0 auto;min-width:126px;background:#0d141b;border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;text-align:left;cursor:pointer;color:var(--text);font-family:inherit;
+  transition:border-color .15s,background .15s,transform .15s}
+.rp-chip:hover{border-color:#2b4258;transform:translateY(-1px)}
+.rp-chip.on{border-color:var(--blue);background:rgba(74,158,255,.09);box-shadow:0 0 0 1px rgba(74,158,255,.25) inset}
+.rp-d{display:block;font-family:var(--mono);font-size:11px;color:var(--dim2);letter-spacing:.06em}
+.rp-r{display:block;font-family:var(--mono);font-size:22px;font-weight:700;color:var(--red);line-height:1.25}
+.rp-r i{font-style:normal;font-size:11px;color:var(--dim);margin-left:3px;font-weight:400}
+.rp-m{display:block;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+.rp-arrow{color:var(--dim2);font-size:12px}
+.rp-delta{margin-top:14px;font-size:12.5px;color:#b9c6d2;line-height:1.6}
+.rp-note{color:var(--dim2)}
+.rp-row{display:flex;gap:10px;align-items:baseline;margin-top:9px;font-size:12.5px}
+.rp-k{flex:0 0 auto;font-size:11px;letter-spacing:.06em;padding:2px 8px;border-radius:5px;background:#16202b}
+.rp-k.red{color:var(--red);background:rgba(255,77,79,.10)}
+.rp-k.amber{color:var(--amber);background:rgba(255,176,32,.10)}
+.rp-k.green{color:var(--green);background:rgba(61,214,140,.10)}
+.rp-k.gray{color:var(--dim)}
+.rp-v{font-family:var(--mono);font-size:12px;color:#cfd9e3;line-height:1.6}
+@media(max-width:760px){.rp-chip{min-width:0;flex:1 1 96px}.rp-note{display:none}}
+.trace{margin:0 0 20px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.trace summary{cursor:pointer;padding:11px 14px;font-size:12px;color:var(--dim);list-style:none;user-select:none}
+.trace summary::-webkit-details-marker{display:none}
+.trace summary::before{content:"\25B8 ";color:var(--dim2)}
+.trace[open] summary::before{content:"\25BE "}
+.trace-flow{display:flex;flex-wrap:wrap;padding:2px 10px 14px}
+.tf-step{position:relative;flex:1 1 118px;min-width:112px;padding:10px 12px 6px 16px;border-left:2px solid var(--line)}
+.tf-step:first-child{border-left-color:#4a9eff}
+.tf-ms{position:absolute;right:8px;top:9px;font-size:9.5px;color:#3d4b59;font-family:var(--mono)}
+.tf-n{font-size:10px;color:var(--dim2);font-family:var(--mono);letter-spacing:.06em}
+.tf-s{font-size:12px;color:#dbe7f2;margin-top:3px}
+.tf-d{font-size:10.5px;color:var(--dim2);margin-top:4px;line-height:1.45}
+
+/* ---- 视觉层级：金额条 / 红单放大 / 过渡 ---- */
+.card .bar{position:relative;height:4px;background:#141d26;border-radius:2px;margin:12px 0 0;overflow:hidden}
+.card .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;
+  background:var(--dim2);opacity:.6;transition:width .55s cubic-bezier(.22,.8,.28,1)}
+.card.red .bar i{background:var(--red);opacity:.92}
+.card.yellow .bar i{background:var(--amber);opacity:.85}
+.card.green .bar i{background:var(--green);opacity:.65}
+
+.card.red{background:linear-gradient(180deg,rgba(255,77,79,.06),rgba(18,26,35,0) 62%),var(--panel);
+  border-color:#2a2028}
+.card.red:hover{background:linear-gradient(180deg,rgba(255,77,79,.09),rgba(21,30,40,0) 62%),#151e28}
+.card.red h3{font-size:17px;letter-spacing:-.2px}
+.card.red .amt{font-size:25px}
+.card.red::before{width:4px}
+@media(max-width:900px){
+  .card.red .amt{font-size:21px}
+}
+@media(max-width:760px){
+  .wrap{padding:22px 14px 60px}
+  .grid{grid-template-columns:1fr;gap:10px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .card{padding:14px 14px 12px}
+  .card h3{font-size:15px}
+  .card .amt{font-size:20px}
+  .card.red .amt{font-size:22px}
+  .timeline{padding:34px 30px 42px}
+  header{flex-direction:column;gap:10px}
+  header .sub{font-size:9px;letter-spacing:1px}
+  header .meta{font-size:10px;text-align:left}
+  .card .foot{flex-wrap:wrap;gap:6px}
+  .card .row{flex-wrap:wrap;gap:6px}
+  footer{flex-wrap:wrap;gap:6px}
+  main,section{min-width:0}
+  .card{min-width:0}
+  .paste-wrap{grid-template-columns:1fr}
+}
+@media(max-width:420px){
+  .stat .v{font-size:19px}
+  .stat .v.money{font-size:17px}
+}
+.view.anim{animation:vfin .17s ease both}
+@keyframes vfin{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+  .card .bar i,.view.anim{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1>跟单雷达</h1>
+        <div class="sub">ORDER FULFILLMENT RISK RADAR</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div>数据日期 <b id="m-asof"></b></div>
+      <div>生成时间 <b id="m-gen"></b></div>
+      <div id="m-fx"></div>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="k">在跟订单</div><div class="v" id="s-total">0</div></div>
+    <div class="stat"><div class="k">红灯 · 已注定违约</div><div class="v red" id="s-red">0</div></div>
+    <div class="stat"><div class="k">黄灯 · 缓冲不足</div><div class="v amber" id="s-yellow">0</div></div>
+    <div class="stat"><div class="k">总敞口</div><div class="v money red" id="s-exp">0</div></div>
+  </div>
+
+  <nav>
+    <button class="on" data-view="overview">总览</button>
+    <button data-view="detail">单票详情</button>
+    <button data-view="brief">今早简报</button>
+    <button data-view="paste">贴邮件</button>
+  </nav>
+
+  <main>
+    <section id="view-overview"></section>
+    <section id="view-detail" class="hidden"></section>
+    <section id="view-brief" class="hidden"></section>
+    <section id="view-paste" class="hidden"></section>
+  </main>
+
+  <footer>
+    <span>跟单雷达 v0.3 · <b style="color:var(--amber)">演示数据</b> · 客户与订单均为虚构</span>
+    <span id="m-src"></span>
+  </footer>
+</div>
+
+<script>
+const DATA = {"generated_at":"2026-11-22T17:09:28+08:00","as_of":"2026-11-21","source":"contest/orders.json (simulated)","market":{"fx":6.7128,"fx_date":"2026-11-19"},"summary":{"total":10,"red":6,"yellow":1,"green":3,"penalty_usd":24609.0,"total_loss_risk_usd":119000.0,"exposure_usd":143609.0},"orders":[{"order_id":"ORD-2026-1109","customer":"Nordic Outdoor AB","country":"SE","product":"户外冲锋衣","amount_usd":119000.0,"promised_date":"2026-12-18","etd_date":"2026-11-27","eta":"2026-12-30","pol":"宁波","pod":"Gothenburg","payment_term":"L/C","lc_expiry":"2026-12-20","delay_days":12,"days_to_deadline":27,"status":"red","penalty_usd":7140.0,"total_loss_risk_usd":119000.0,"exposure_usd":126140.0,"reason":"预计 2026-12-30 到港，承诺 2026-12-18，晚 12 天","action":"到港日已超信用证有效期，整单拒付风险","action_en":"ETA past L/C expiry - whole payment at risk"},{"order_id":"ORD-2026-1106","customer":"Southern Cross Workwear","country":"AU","product":"阻燃工装","amount_usd":138000.0,"promised_date":"2026-12-15","etd_date":"2026-11-30","eta":"2027-01-04","pol":"广州","pod":"Melbourne","payment_term":"T/T","lc_expiry":"","delay_days":20,"days_to_deadline":24,"status":"red","penalty_usd":13800.0,"total_loss_risk_usd":0.0,"exposure_usd":13800.0,"reason":"预计 2027-01-04 到港，承诺 2026-12-15，晚 20 天","action":"启动违约预案：报损、协商、备索赔资料","action_en":"Start breach protocol: report, negotiate, prep claim"},{"order_id":"ORD-2026-1101","customer":"Nordwind Textil GmbH","country":"DE","product":"涤棉工装裤","amount_usd":84000.0,"promised_date":"2026-12-10","etd_date":"2026-11-22","eta":"2026-12-20","pol":"宁波","pod":"Hamburg","payment_term":"T/T","lc_expiry":"","delay_days":10,"days_to_deadline":19,"status":"red","penalty_usd":2520.0,"total_loss_risk_usd":0.0,"exposure_usd":2520.0,"reason":"预计 2026-12-20 到港，承诺 2026-12-10，晚 10 天","action":"启动违约预案：报损、协商、备索赔资料","action_en":"Start breach protocol: report, negotiate, prep claim"},{"order_id":"ORD-2026-1103","customer":"山田繊維株式会社","country":"JP","product":"功能性面料","amount_usd":42000.0,"promised_date":"2026-12-20","etd_date":"2026-11-28","eta":"2026-12-27","pol":"青岛","pod":"Tokyo","payment_term":"T/T","lc_expiry":"","delay_days":7,"days_to_deadline":29,"status":"red","penalty_usd":588.0,"total_loss_risk_usd":0.0,"exposure_usd":588.0,"reason":"预计 2026-12-27 到港，承诺 2026-12-20，晚 7 天","action":"申请客户延期 + 问船公司改配快船","action_en":"Ask buyer for extension + ask carrier for faster routing"},{"order_id":"ORD-2026-1110","customer":"Cebu Fashion Corp","country":"PH","product":"休闲裤","amount_usd":45000.0,"promised_date":"2026-12-30","etd_date":"2026-12-02","eta":"2027-01-02","pol":"深圳","pod":"Cebu","payment_term":"T/T","lc_expiry":"","delay_days":3,"days_to_deadline":39,"status":"red","penalty_usd":405.0,"total_loss_risk_usd":0.0,"exposure_usd":405.0,"reason":"预计 2027-01-02 到港，承诺 2026-12-30，晚 3 天","action":"申请客户延期 + 问船公司改配快船","action_en":"Ask buyer for extension + ask carrier for faster routing"},{"order_id":"ORD-2026-1107","customer":"Maison Lumiere SARL","country":"FR","product":"女装连衣裙","amount_usd":52000.0,"promised_date":"2027-01-08","etd_date":"2026-12-05","eta":"2027-01-09","pol":"上海","pod":"Le Havre","payment_term":"T/T","lc_expiry":"","delay_days":1,"days_to_deadline":48,"status":"red","penalty_usd":156.0,"total_loss_risk_usd":0.0,"exposure_usd":156.0,"reason":"预计 2027-01-09 到港，承诺 2027-01-08，晚 1 天","action":"申请客户延期 + 问船公司改配快船","action_en":"Ask buyer for extension + ask carrier for faster routing"},{"order_id":"ORD-2026-1108","customer":"Al-Rashid Trading LLC","country":"AE","product":"长袍面料","amount_usd":67500.0,"promised_date":"2026-12-22","etd_date":"2026-11-24","eta":"2026-12-20","pol":"宁波","pod":"Jebel Ali","payment_term":"T/T","lc_expiry":"","delay_days":-2,"days_to_deadline":31,"status":"yellow","penalty_usd":0.0,"total_loss_risk_usd":0.0,"exposure_usd":0.0,"reason":"预计 2026-12-20 到港，距承诺日仅 2 天","action":"盯住，剩 31 天窗口","action_en":"Watch it - 31 day(s) left"},{"order_id":"ORD-2026-1102","customer":"Pacific Apparel Inc.","country":"US","product":"针织T恤","amount_usd":165000.0,"promised_date":"2026-12-05","etd_date":"2026-11-20","eta":"2026-12-02","pol":"上海","pod":"Los Angeles","payment_term":"L/C","lc_expiry":"2026-12-16","delay_days":-3,"days_to_deadline":14,"status":"green","penalty_usd":0.0,"total_loss_risk_usd":0.0,"exposure_usd":0.0,"reason":"预计 2026-12-02 到港，早于承诺日 3 天","action":"正常","action_en":"On track"},{"order_id":"ORD-2026-1104","customer":"Comercial Sul Ltda","country":"BR","product":"牛仔夹克","amount_usd":96000.0,"promised_date":"2027-01-10","etd_date":"2026-12-01","eta":"2027-01-05","pol":"深圳","pod":"Santos","payment_term":"L/C","lc_expiry":"2027-01-15","delay_days":-5,"days_to_deadline":50,"status":"green","penalty_usd":0.0,"total_loss_risk_usd":0.0,"exposure_usd":0.0,"reason":"预计 2027-01-05 到港，早于承诺日 5 天","action":"正常","action_en":"On track"},{"order_id":"ORD-2026-1105","customer":"Hanoi Garment JSC","country":"VN","product":"梭织衬衫","amount_usd":78000.0,"promised_date":"2026-12-28","etd_date":"2026-11-26","eta":"2026-12-24","pol":"厦门","pod":"Haiphong","payment_term":"T/T","lc_expiry":"","delay_days":-4,"days_to_deadline":37,"status":"green","penalty_usd":0.0,"total_loss_risk_usd":0.0,"exposure_usd":0.0,"reason":"预计 2026-12-24 到港，早于承诺日 4 天","action":"正常","action_en":"On track"}],"demo":true};
+const MAILS = {"mails":[{"order_id":"ORD-2026-1101","group":"standard","from":"Klaus Berger <k.berger@nordwind-textil.de>","subject":"Order inquiry - work trousers","lang":"en","body":"Dear Sales Team,\n\nThis is Klaus from Nordwind Textil GmbH, Hamburg. We met at the Canton Fair last month.\n\nWe would like to place an order for 12,000 pcs of poly-cotton work trousers, model WT-220, at USD 7.00 per piece FOB Ningbo. Total USD 84,000.\n\nWe need the goods delivered to Hamburg before December 10, 2026. Payment by T/T 30 days after B/L date.\n\nPlease note our standard late delivery clause: 0.3% of order value per day of delay, capped at 15%.\n\nLooking forward to your PI.\n\nBest regards,\nKlaus Berger"},{"order_id":"ORD-2026-1109","group":"standard","from":"Anna Lindqvist <anna.l@nordicoutdoor.se>","subject":"PO #NO-4471 softshell jackets","lang":"en","body":"Hi,\n\nFollowing our discussion, please proceed with 7,000 pcs softshell jackets (3-layer, black/navy) at USD 17.00/pc, total USD 119,000, CIF Gothenburg.\n\nDelivery must be completed by 2026-12-18 at the latest. Payment: L/C at sight, valid until 2026-12-20.\n\nOur contract stipulates 0.5% per day penalty for late delivery, maximum 20% of contract value.\n\nPlease confirm production schedule.\n\nRegards,\nAnna Lindqvist\nPurchasing Manager"},{"order_id":"ORD-2026-1111","group":"standard","from":"Rajesh Kumar <rajesh@rajeshexports.in>","subject":"enquiry","lang":"en","body":"Dear Sir,\n\nWe are Rajesh Exports, Ludhiana. Kindly send your best price for cotton canvas fabric 10oz. We need around 20 containers yearly.\n\nPlease quote FOB and CIF Nhava Sheva.\n\nThanks\nRajesh","expect":{"qty":null,"amount_usd":null,"promised_date":null,"payment_term":null,"penalty_rate_per_day":null}},{"order_id":"ORD-2026-1104","group":"standard","from":"Carlos Menezes <carlos@comercialsul.com.br>","subject":"Pedido - jaquetas jeans","lang":"pt","body":"Prezados,\n\nGostariamos de encomendar 8,000 jaquetas jeans masculinas, modelo DJ-118, a USD 12.00 por peca, total USD 96,000, FOB Shanghai.\n\nEntrega ate 10 de janeiro de 2027. Pagamento: L/C a vista.\n\nMulta por atraso: 0.5% ao dia, limitada a 20% do valor do pedido.\n\nAtenciosamente,\nCarlos Menezes\nComercial Sul Ltda"},{"order_id":"ORD-2026-1103","group":"standard","from":"Yamada Taro <yamada@yamada-textile.co.jp>","subject":"機能性面料の発注","lang":"ja","body":"いつもお世話になっております。\n\n機能性面料 FD-330 について、5,000 枚、単価 USD 8.40、合計 USD 42,000 にて発注いたします。\n\n納期は 2026年12月20日 までにお願いします。\nお支払いは T/T でお願いします。\n遅延の場合は 1日あたり 0.2%、上限は 10% とさせていただきます。\n\n山田繊維株式会社\n山田太郎"},{"order_id":"TRAP-1","group":"trap","from":"Sophie Martin <s.martin@maisonlumiere.fr>","subject":"RE: RE: quantity revision","lang":"en","body":"Hi,\n\nFollowing up on my earlier enquiry: originally we planned 10,000 pcs for the linen dresses, but after the budget review we have to cut it down to 6,000 pcs. Price stays at USD 13.00/pc, so the total comes to USD 78,000.\n\nDelivery by 2027-01-08. T/T 30% deposit, 70% before shipment.\n\nSorry for the back and forth.\n\nSophie","expect":{"qty":6000,"amount_usd":78000,"promised_date":"2027-01-08","payment_term":"T/T"}},{"order_id":"TRAP-2","group":"trap","from":"Peter Novak <p.novak@pacificapparel.com>","subject":"knitted T-shirts - shipping & arrival","lang":"en","body":"Dear team,\n\nPlease ship the 30,000 pcs knitted T-shirts by December 5, 2026 (ETD Ningbo). The goods must arrive at our Los Angeles warehouse no later than January 8, 2027.\n\nPrice as agreed: USD 5.50/pc, total USD 165,000. Payment by L/C at sight.\n\nLate arrival beyond January 8 will trigger a 0.3% per day penalty, capped at 15%.\n\nBest,\nPeter","expect":{"qty":30000,"amount_usd":165000,"promised_date":"2027-01-08","payment_term":"L/C","penalty_rate_per_day":0.003}},{"order_id":"TRAP-3","group":"trap","from":"Ahmed Al-Rashid <ahmed@alrashid-trading.ae>","subject":"curtain fabric - tentative","lang":"en","body":"Dear Sir,\n\nWe are interested in your blackout curtain fabric. Quantity approximately 15,000 pcs, but this depends on our client's confirmation.\n\nTarget price USD 4.50/pc, though we are open to your best offer. Total would be around USD 67,500.\n\nWe cannot confirm a delivery date yet.\n\nRegards,\nAhmed","expect":{"qty":null,"promised_date":null,"payment_term":null,"penalty_rate_per_day":null}}],"parsed":{"ORD-2026-1101":{"customer":"Nordwind Textil GmbH","country":"DE","product":"poly-cotton work trousers","qty":12000,"unit":"pcs","unit_price_usd":7.0,"amount_usd":84000,"promised_date":"2026-12-10","payment_term":"T/T","penalty_rate_per_day":0.003,"penalty_cap":0.15,"missing":[]},"ORD-2026-1109":{"customer":null,"country":null,"product":"softshell jackets (3-layer, black/navy)","qty":7000,"unit":"pcs","unit_price_usd":17.0,"amount_usd":119000,"promised_date":"2026-12-18","payment_term":"L/C","penalty_rate_per_day":0.005,"penalty_cap":0.2,"missing":["customer","country"]},"ORD-2026-1111":{"customer":"Rajesh Exports","country":null,"product":"cotton canvas fabric 10oz","qty":null,"unit":null,"unit_price_usd":null,"amount_usd":null,"promised_date":null,"payment_term":null,"penalty_rate_per_day":null,"penalty_cap":null,"missing":["qty","unit","unit_price_usd","amount_usd","promised_date","payment_term","penalty_rate_per_day","penalty_cap"]},"ORD-2026-1104":{"customer":"Comercial Sul Ltda","country":null,"product":"jaquetas jeans masculinas modelo DJ-118","qty":8000,"unit":"pcs","unit_price_usd":12.0,"amount_usd":96000.0,"promised_date":"2027-01-10","payment_term":"L/C","penalty_rate_per_day":0.005,"penalty_cap":0.2,"missing":[]},"ORD-2026-1103":{"customer":"山田繊維株式会社","country":null,"product":"機能性面料 FD-330","qty":5000,"unit":"pcs","unit_price_usd":8.4,"amount_usd":42000,"promised_date":"2026-12-20","payment_term":"T/T","penalty_rate_per_day":0.002,"penalty_cap":0.1,"missing":[]},"TRAP-1":{"customer":null,"country":null,"product":"linen dresses","qty":6000,"unit":"pcs","unit_price_usd":13.0,"amount_usd":78000.0,"promised_date":"2027-01-08","payment_term":"T/T","penalty_rate_per_day":null,"penalty_cap":null,"missing":[]},"TRAP-2":{"customer":null,"country":null,"product":"knitted T-shirts","qty":30000,"unit":"pcs","unit_price_usd":5.5,"amount_usd":165000,"promised_date":"2026-12-05","payment_term":"L/C","penalty_rate_per_day":0.003,"penalty_cap":0.15,"missing":[]},"TRAP-3":{"customer":null,"country":null,"product":"blackout curtain fabric","qty":15000,"unit":"pcs","unit_price_usd":4.5,"amount_usd":67500,"promised_date":null,"payment_term":null,"penalty_rate_per_day":null,"penalty_cap":null,"missing":["customer","country","promised_date","payment_term","penalty_rate_per_day","penalty_cap"]}},"meta":{"ORD-2026-1101":{"ai":{"id":"chatcmpl-1e3ad06c-f7e5-9e8f-8ac8-85af47459913","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":591,"total_tokens":689,"completion_tokens":98},"ms":4990},"raw":"{\"customer\":\"Nordwind Textil GmbH\",\"country\":\"DE\",\"product\":\"poly-cotton work trousers\",\"qty\":12000,\"unit\":\"pcs\",\"unit_price_usd\":7.0,\"amount_usd\":84000,\"promised_date\":\"2026-12-10\",\"payment_term\":\"T/T\",\"penalty_rate_per_day\":0.003,\"penalty_cap\":0.15,\"missing\":[]}","subject":"Order inquiry - work trousers"},"ORD-2026-1109":{"ai":{"id":"chatcmpl-d7970f11-50bf-9389-a761-f5fced7094f5","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":583,"total_tokens":706,"completion_tokens":123},"ms":1794},"raw":"{\"customer\": null, \"country\": null, \"product\": \"softshell jackets (3-layer, black/navy)\", \"qty\": 7000, \"unit\": \"pcs\", \"unit_price_usd\": 17.0, \"amount_usd\": 119000, \"promised_date\": \"2026-12-18\", \"payment_term\": \"L/C\", \"penalty_rate_per_day\": 0.005, \"penalty_cap\": 0.2, \"missing\": [\"customer\", \"country\"]}","subject":"PO #NO-4471 softshell jackets"},"ORD-2026-1111":{"ai":{"id":"chatcmpl-ecd7179d-4700-9f9c-b86c-68982cef832a","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":492,"total_tokens":594,"completion_tokens":102},"ms":1110},"raw":"{\"customer\":\"Rajesh Exports\",\"country\":null,\"product\":\"cotton canvas fabric 10oz\",\"qty\":null,\"unit\":null,\"unit_price_usd\":null,\"amount_usd\":null,\"promised_date\":null,\"payment_term\":null,\"penalty_rate_per_day\":null,\"penalty_cap\":null,\"missing\":[\"qty\",\"unit\",\"unit_price_usd\",\"amount_usd\",\"promised_date\",\"payment_term\",\"penalty_rate_per_day\",\"penalty_cap\"]}","subject":"enquiry"},"ORD-2026-1104":{"ai":{"id":"chatcmpl-fc71e7a0-1b17-9f20-88ae-cfe1d07079ec","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":566,"total_tokens":706,"completion_tokens":140},"ms":1340},"raw":"{\n  \"customer\": \"Comercial Sul Ltda\",\n  \"country\": null,\n  \"product\": \"jaquetas jeans masculinas modelo DJ-118\",\n  \"qty\": 8000,\n  \"unit\": \"pcs\",\n  \"unit_price_usd\": 12.0,\n  \"amount_usd\": 96000.0,\n  \"promised_date\": \"2027-01-10\",\n  \"payment_term\": \"L/C\",\n  \"penalty_rate_per_day\": 0.005,\n  \"penalty_cap\": 0.2,\n  \"missing\": []\n}","subject":"Pedido - jaquetas jeans"},"ORD-2026-1103":{"ai":{"id":"chatcmpl-866bc7f8-b6e3-9979-bc2e-eb17f00424c3","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":572,"total_tokens":675,"completion_tokens":103},"ms":1197},"raw":"{\"customer\":\"山田繊維株式会社\",\"country\":null,\"product\":\"機能性面料 FD-330\",\"qty\":5000,\"unit\":\"pcs\",\"unit_price_usd\":8.4,\"amount_usd\":42000,\"promised_date\":\"2026-12-20\",\"payment_term\":\"T/T\",\"penalty_rate_per_day\":0.002,\"penalty_cap\":0.1,\"missing\":[]}","subject":"機能性面料の発注"},"TRAP-1":{"ai":{"id":"chatcmpl-791ff7c8-5d77-92b8-b340-098ba20015c3","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":552,"total_tokens":657,"completion_tokens":105},"ms":1091},"raw":"{\"customer\": null, \"country\": null, \"product\": \"linen dresses\", \"qty\": 6000, \"unit\": \"pcs\", \"unit_price_usd\": 13.0, \"amount_usd\": 78000.0, \"promised_date\": \"2027-01-08\", \"payment_term\": \"T/T\", \"penalty_rate_per_day\": null, \"penalty_cap\": null, \"missing\": []}","subject":"RE: RE: quantity revision"},"TRAP-2":{"ai":{"id":"chatcmpl-90e60e42-f8d3-9c7b-a428-fd311a66a890","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":558,"total_tokens":685,"completion_tokens":127},"ms":4416},"raw":"{\n  \"customer\": null,\n  \"country\": null,\n  \"product\": \"knitted T-shirts\",\n  \"qty\": 30000,\n  \"unit\": \"pcs\",\n  \"unit_price_usd\": 5.5,\n  \"amount_usd\": 165000,\n  \"promised_date\": \"2026-12-05\",\n  \"payment_term\": \"L/C\",\n  \"penalty_rate_per_day\": 0.003,\n  \"penalty_cap\": 0.15,\n  \"missing\": []\n}","subject":"knitted T-shirts - shipping & arrival"},"TRAP-3":{"ai":{"id":"chatcmpl-0fee00b0-d34d-955b-aae9-ce538e976f32","model":"qwen-flash-2025-07-28","usage":{"prompt_tokens":518,"total_tokens":658,"completion_tokens":140},"ms":1318},"raw":"{\n  \"customer\": null,\n  \"country\": null,\n  \"product\": \"blackout curtain fabric\",\n  \"qty\": 15000,\n  \"unit\": \"pcs\",\n  \"unit_price_usd\": 4.5,\n  \"amount_usd\": 67500,\n  \"promised_date\": null,\n  \"payment_term\": null,\n  \"penalty_rate_per_day\": null,\n  \"penalty_cap\": null,\n  \"missing\": [\n    \"customer\",\n    \"country\",\n    \"promised_date\",\n    \"payment_term\",\n    \"penalty_rate_per_day\",\n    \"penalty_cap\"\n  ]\n}","subject":"curtain fabric - tentative"}}};
+const POLICY = {"DE":[{"id":"EU-01","category":"单证","doc":"商业发票 / 提单","rule":"欧盟进口商必须有 EORI 号，发票与提单上必须显示该 EORI；无 EORI 无法做进口申报。","common_omission":"只写了公司名和地址，没写 EORI 号。","consequence":"清关无法申报，货压在港口，滞港费按天算。","action":"发票和提单上补上进口商 EORI，再发。","confidence":"高"},{"id":"EU-02","category":"标签","doc":"产品本体 / 包装 / 随附文件","rule":"通用产品安全条例 GPSR（EU）2023/988 自 2024-12-13 起适用：产品上须有 EU 境内负责人（Responsible Person）的名称、通信地址与邮箱，以及可追溯信息（批次/型号）。","common_omission":"只有中国工厂信息，没有欧盟境内的负责人。","consequence":"平台下架链接、海关扣留、被要求召回。","action":"包装上加 EU 负责人信息，缺的这一票不要发。","confidence":"高"},{"id":"EU-03","category":"标签","doc":"纺织品标签","rule":"纺织品须按 EU 1007/2011 标注纤维成分（百分比）与纤维名称，仅允许该国语言清单内的名称；护理标识为自愿但一旦标注须合规。","common_omission":"写了中文思维直译的纤维名（如『涤纶』直译 polyester 之外的自造词）。","consequence":"市场监管下架，进口商被罚。","action":"纤维名按法规清单用词，别自己翻译。","confidence":"高"}],"FR":[{"id":"EU-01","category":"单证","doc":"商业发票 / 提单","rule":"欧盟进口商必须有 EORI 号，发票与提单上必须显示该 EORI；无 EORI 无法做进口申报。","common_omission":"只写了公司名和地址，没写 EORI 号。","consequence":"清关无法申报，货压在港口，滞港费按天算。","action":"发票和提单上补上进口商 EORI，再发。","confidence":"高"},{"id":"EU-02","category":"标签","doc":"产品本体 / 包装 / 随附文件","rule":"通用产品安全条例 GPSR（EU）2023/988 自 2024-12-13 起适用：产品上须有 EU 境内负责人（Responsible Person）的名称、通信地址与邮箱，以及可追溯信息（批次/型号）。","common_omission":"只有中国工厂信息，没有欧盟境内的负责人。","consequence":"平台下架链接、海关扣留、被要求召回。","action":"包装上加 EU 负责人信息，缺的这一票不要发。","confidence":"高"},{"id":"EU-03","category":"标签","doc":"纺织品标签","rule":"纺织品须按 EU 1007/2011 标注纤维成分（百分比）与纤维名称，仅允许该国语言清单内的名称；护理标识为自愿但一旦标注须合规。","common_omission":"写了中文思维直译的纤维名（如『涤纶』直译 polyester 之外的自造词）。","consequence":"市场监管下架，进口商被罚。","action":"纤维名按法规清单用词，别自己翻译。","confidence":"高"}],"SE":[{"id":"EU-01","category":"单证","doc":"商业发票 / 提单","rule":"欧盟进口商必须有 EORI 号，发票与提单上必须显示该 EORI；无 EORI 无法做进口申报。","common_omission":"只写了公司名和地址，没写 EORI 号。","consequence":"清关无法申报，货压在港口，滞港费按天算。","action":"发票和提单上补上进口商 EORI，再发。","confidence":"高"},{"id":"EU-02","category":"标签","doc":"产品本体 / 包装 / 随附文件","rule":"通用产品安全条例 GPSR（EU）2023/988 自 2024-12-13 起适用：产品上须有 EU 境内负责人（Responsible Person）的名称、通信地址与邮箱，以及可追溯信息（批次/型号）。","common_omission":"只有中国工厂信息，没有欧盟境内的负责人。","consequence":"平台下架链接、海关扣留、被要求召回。","action":"包装上加 EU 负责人信息，缺的这一票不要发。","confidence":"高"},{"id":"EU-03","category":"标签","doc":"纺织品标签","rule":"纺织品须按 EU 1007/2011 标注纤维成分（百分比）与纤维名称，仅允许该国语言清单内的名称；护理标识为自愿但一旦标注须合规。","common_omission":"写了中文思维直译的纤维名（如『涤纶』直译 polyester 之外的自造词）。","consequence":"市场监管下架，进口商被罚。","action":"纤维名按法规清单用词，别自己翻译。","confidence":"高"}],"US":[{"id":"US-01","category":"单证","doc":"ISF 10+2 申报","rule":"海运进口须在装船前 24 小时向 CBP 申报 ISF（10 项进口商数据 + 2 项承运人数据）。","common_omission":"以为到港前报就行，实际是开船前 24 小时。","consequence":"CBP 可处每票数千美元罚金（上限按法规），并可能扣货查验。","action":"订舱后立刻让货代报 ISF，不要等到装船。","confidence":"高"},{"id":"US-02","category":"标签","doc":"纺织品与服装标签","rule":"须标原产国、纤维成分（百分比）、护理说明；进口商/制造商标识按 16 CFR 303 要求。","common_omission":"只标了『Made in China』，没有成分与护理说明。","consequence":"FTC 处罚、电商平台下架。","action":"三样缺一不可：原产国 / 成分 / 护理。","confidence":"高"},{"id":"US-03","category":"准入","doc":"FDA 预申报","rule":"食品（含部分接触食品材料）、化妆品、药品类进口须提前向 FDA 提交 Prior Notice，且进口商需有 FDA 注册与 US Agent。","common_omission":"把纺织品当无关品类，忽略随货的食品接触部件（如餐具套装）。","consequence":"FDA 直接拒收，货退运或销毁。","action":"只要触及『入口』或『接触食品』，先查 FDA。","confidence":"高"}],"JP":[{"id":"JP-01","category":"标签","doc":"纺织品标签（家庭用品品質表示法）","rule":"纺织品须标注纤维组成（百分比）、洗涤护理标识、表示者名称与联系方式（日本境内责任人）。","common_omission":"护理标识用了中国国标符号体系，与日本 JIS 图形不一致。","consequence":"不得销售，被要求整改重贴。","action":"护理图形按 JIS L 0217，不要用国标符号。","confidence":"高"},{"id":"JP-02","category":"单证","doc":"进口申报（税関）","rule":"需商业发票、装箱单、提单/B/L、原产地证（申请 RCEP/EPA 优惠税率时必备），且发票须含 HS 编码与 INCOTERMS。","common_omission":"申请 RCEP 优惠却没附原产地证或自我声明，被按最惠国税率征。","consequence":"多缴关税，事后追补极难。","action":"要享优惠，原产地证和发票上的声明必须一起到。","confidence":"高"},{"id":"JP-03","category":"准入","doc":"食品 / 接触食品器具","rule":"食品与食品接触器具须向厚生劳动省提交『食品等輸入届出』；器具按食品卫生法需符合材质规格。","common_omission":"餐具、保鲜盒类当普通日用品发，漏了届出。","consequence":"通关受阻，须退运或销毁。","action":"接触食品的部件，一律按食品口径准备。","confidence":"高"}],"BR":[{"id":"BR-01","category":"单证","doc":"SISCOMEX 进口申报","rule":"须在 SISCOMEX 系统申报；发票须含 NCM 编码（巴西税则号）、INCOTERMS、原产国；部分 NCM 需事先取得进口许可证（LI）。","common_omission":"用中国 HS 编码代替 NCM，前 8 位对不上。","consequence":"申报被退回重做，货压在港口，滞港费高。","action":"NCM 编码单独核，别拿 HS 前 6 位凑。","confidence":"高"},{"id":"BR-02","category":"标签","doc":"纺织品与消费品标签","rule":"须用葡萄牙语标注：纤维成分、护理说明、原产国、进口商名称与 CNPJ（巴西税号）；INMETRO 强制认证品类还须加认证标识。","common_omission":"标签只有英文，没有葡语与 CNPJ。","consequence":"被消费者保护机构处罚，货物下架。","action":"葡语 + CNPJ，缺一样都别发。","confidence":"高"},{"id":"BR-03","category":"单证","doc":"提单 / 发票 / 装箱单","rule":"巴西同批货物三份单据的品牌、品名、HS/NCM 前 6 位必须一致；申报错误有到港后限时更正窗口，逾期按天计罚（* 罚金标准按巴西联邦税务局当期规定核对）。","common_omission":"提单写品牌名、发票写型号，两边对不上。","consequence":"查验扣货、按天罚款，严重的退运。","action":"三单品牌与品名逐字核对一遍再发。","confidence":"中"}],"AU":[{"id":"AU-01","category":"单证","doc":"木质包装","rule":"含木质包装（托盘、垫木）须按 ISPM 15 做热处理或熏蒸，并加施 IPPC 标识。","common_omission":"用了实木托盘，没做处理也没盖章。","consequence":"到港被要求退运或自费熏蒸，费用常高于货值。","action":"木质包装必须有 IPPC 章，或用免熏蒸材料。","confidence":"高"},{"id":"AU-02","category":"准入","doc":"生物安全进口条件","rule":"所有货物须先查 BICON 确认进口条件；食品、植物源性、动物源性品类通常需进口许可证。","common_omission":"凭经验发货，没查 BICON 就直接装。","consequence":"到港被扣，退运或销毁，运费全损。","action":"发货前查 BICON，截图存档。","confidence":"高"},{"id":"AU-03","category":"标签","doc":"纺织品与服装标签","rule":"须标纤维成分、原产国、护理说明，以及澳洲境内责任方（进口商/分销商）信息。","common_omission":"有成分有原产国，但没写澳洲责任方。","consequence":"ACCC 介入，下架整改。","action":"标签上补澳洲责任方名称与地址。","confidence":"高"}],"VN":[{"id":"VN-01","category":"单证","doc":"原产地证","rule":"申请 ACFTA / RCEP 优惠税率须提供对应原产地证（Form E 等），且发票、箱单、提单信息须一致。","common_omission":"报关时才发现原产地证没办，只能按普通税率缴。","consequence":"多缴关税，且事后补证通常不认。","action":"订舱时同步启动原产地证，别等报关。","confidence":"高"},{"id":"VN-02","category":"标签","doc":"进口商品标签","rule":"进口货物须有越南语标签：品名、原产国、进口商名称与地址、成分/主要参数；标签须在清关前完成加贴。","common_omission":"打算到港后再贴，实际清关环节就要查。","consequence":"清关被要求退回补标，产生滞港费。","action":"越南语标签在国内贴好再发。","confidence":"高"},{"id":"VN-03","category":"准入","doc":"纺织品化学限量","rule":"纺织品甲醛、可分解致癌芳香胺染料等有限量要求（* 具体限量与适用标准号按越南科技部当期 QCVN 核对）。","common_omission":"只按国标 GB 做检测，越南不认这份报告。","consequence":"抽检不合格整批退运。","action":"要越南市场，检测报告按越南标准重做。","confidence":"低"}],"AE":[{"id":"AE-01","category":"准入","doc":"符合性证书（CoC / ECAS）","rule":"部分品类（电器、玩具、部分建材等）须取得阿联酋认可机构签发的符合性证书，装运前完成。","common_omission":"以为和沙特 SABER 一样能到港补办。","consequence":"无法清关，退运或转卖第三国。","action":"先确认品类要不要 CoC，要就在装运前办完。","confidence":"中"},{"id":"AE-02","category":"标签","doc":"产品标签","rule":"须有阿拉伯语（可双语）标签：产品名、成分/规格、原产国、生产与有效期（适用时）、进口商信息。","common_omission":"只有英文标签。","consequence":"海关或市政部门要求整改，货压港。","action":"阿语标签与英文并列印。","confidence":"高"},{"id":"AE-03","category":"单证","doc":"商业发票认证","rule":"部分情形下商业发票与产地证需经商会及使馆/领事认证；迪拜海关对提单背书、HS 编码一致性查得较细。","common_omission":"发票金额与提单、合同不一致（为省税低报）。","consequence":"查验、罚款、进入黑名单。","action":"三单金额必须一致，别为省税低报。","confidence":"中"}],"PH":[{"id":"PH-01","category":"单证","doc":"进口报关（BOC）","rule":"须通过菲律宾海关电子系统申报；部分品类需事先取得主管部门许可（如食品化妆品需 FDA Philippines）。","common_omission":"把化妆品/食品接触品当普通货物报。","consequence":"扣货，补办许可期间产生堆存费。","action":"先查品类要不要 FDA-PH 许可。","confidence":"中"},{"id":"PH-02","category":"标签","doc":"消费品标签","rule":"须标注品名、成分、原产国、进口商名称与地址；食品与化妆品另有专门标签规则。","common_omission":"只写原产国，没有菲律宾进口商信息。","consequence":"零售端被要求下架。","action":"标签补进口商名称与地址。","confidence":"中"},{"id":"PH-03","category":"准入","doc":"食品 / 化妆品注册","rule":"食品与化妆品须在 FDA Philippines 完成注册/通知，取得相应许可后方可进口销售。","common_omission":"以为和普通货物一样报关就能卖。","consequence":"货物被查封，销售违法。","action":"要卖食品化妆品，先办 FDA-PH 注册。","confidence":"中"}],"_euCodes":["AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IE","IT","LT","LU","LV","MT","NL","PL","PT","RO","SE","SI","SK"],"_eu":[{"id":"EU-01","category":"单证","doc":"商业发票 / 提单","rule":"欧盟进口商必须有 EORI 号，发票与提单上必须显示该 EORI；无 EORI 无法做进口申报。","common_omission":"只写了公司名和地址，没写 EORI 号。","consequence":"清关无法申报，货压在港口，滞港费按天算。","action":"发票和提单上补上进口商 EORI，再发。","confidence":"高"},{"id":"EU-02","category":"标签","doc":"产品本体 / 包装 / 随附文件","rule":"通用产品安全条例 GPSR（EU）2023/988 自 2024-12-13 起适用：产品上须有 EU 境内负责人（Responsible Person）的名称、通信地址与邮箱，以及可追溯信息（批次/型号）。","common_omission":"只有中国工厂信息，没有欧盟境内的负责人。","consequence":"平台下架链接、海关扣留、被要求召回。","action":"包装上加 EU 负责人信息，缺的这一票不要发。","confidence":"高"},{"id":"EU-03","category":"标签","doc":"纺织品标签","rule":"纺织品须按 EU 1007/2011 标注纤维成分（百分比）与纤维名称，仅允许该国语言清单内的名称；护理标识为自愿但一旦标注须合规。","common_omission":"写了中文思维直译的纤维名（如『涤纶』直译 polyester 之外的自造词）。","consequence":"市场监管下架，进口商被罚。","action":"纤维名按法规清单用词，别自己翻译。","confidence":"高"}],"_asOf":"2026-11-21"};
+const POLICYCN = {"_asOf":"2026-11-22","items":[{"id":"P001","category":"报关","doc":"出口报关申报时限","rule":"出口货物运抵海关监管区后、装货 24 小时以前须向海关申报。注意：滞报金只对进口货物征收，出口逾期申报不征滞报金，但会影响装船或被查验处罚。","common_omission":"以为报关是货代的事，装柜当天才把资料给出去","consequence":"赶不上本航次，顺延下一班，交期直接推 7–14 天","action":"装柜前 48 小时把箱单、发票、合同交给报关行；船期表上把「申报截止」写成装船日减 1 天","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 政务公开 → 海关法规；条文见《海关法》第二十四条","confidence":"高","type":"法规"},{"id":"P002","category":"报关","doc":"电子报关单退回修改","rule":"电子报关单被海关退回后要修改重报，申报时间以海关再次接收的时间为准，不是以第一次提交的时间为准。","common_omission":"以为退回改一下就好，实际时间从头算","consequence":"改单耗时挤掉装船时间，错过截单","action":"退回当天就改完重报，不要等第二天；改单原因记进这一单的日志","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 政务公开 → 海关法规；具体以属地海关现场要求为准","confidence":"中","type":"法规"},{"id":"P003","category":"报关","doc":"海关企业信用分级监管","rule":"海关按信用等级管理企业，失信企业查验频次大幅提高，通关明显变慢。","common_omission":"不知道自己企业是什么等级，把高查验率当运气差","consequence":"查验率高位运行，每票都多出 1–3 天","action":"先查自家信用等级（海关企业进出口信用信息公示平台），等级低的先修复再谈交期承诺","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 企业管理和稽查 → 信用信息公示","confidence":"高","type":"法规"},{"id":"P004","category":"报关","doc":"出口管制商品许可要求","rule":"管制类货物出口必须提前取得出口许可证，无证不得报关。两用物项也在管制范围内。","common_omission":"以为只有军品才管制，两用物项漏办","consequence":"无证直接无法报关，订单履约失败","action":"出货前按 HS 编码和品名查两用物项出口管制清单，拿不准就问属地海关","source":"https://flk.npc.gov.cn/","source_note":"国家法律法规数据库 → 搜《出口管制法》","confidence":"高","type":"法规"},{"id":"P005","category":"报关","doc":"原产地证申报规范","rule":"享受关税优惠的出口货物要如实申报原产地信息，单证必须和货物一致。","common_omission":"产地证上的 HS 编码和报关单不一致","consequence":"客户目的港多交关税，甚至拒收","action":"产地证、报关单、发票三处 HS 前 6 位对齐后再提交","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 原产地管理","confidence":"高","type":"法规"},{"id":"P006","category":"报关","doc":"出口货物查验规定","rule":"海关可随机安排现场查验，查验期间货物不能装船，查验时长不确定。","common_omission":"交期倒排时没给查验留任何缓冲，查验日正好撞截单日","consequence":"临时查验挤掉装船时间，赶不上船","action":"交期倒排时给查验留 2 天缓冲；一旦被查验立刻通知客户修正预计到港日","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 通关监管","confidence":"中","type":"法规"},{"id":"P007","category":"报关","doc":"出口货物改单收费规则","rule":"报关单放行后申请修改会产生改单费用，同时占用通关时间。","common_omission":"放行后才发现品名、金额写错，只能走改单","consequence":"多花钱又拖时间，两头都损","action":"放行前逐字段核一遍（品名、数量、金额、HS）；改单费与耗时记进这一单的成本","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 通关管理；收费标准以现场公布为准","confidence":"中","type":"法规"},{"id":"P008","category":"报关","doc":"出口产品知识产权查验规则","rule":"出口货物不得侵犯他人商标、专利等知识产权，海关可主动查验并扣货。","common_omission":"客户给的品牌 logo 没有授权书就直接印上去","consequence":"货物被扣、罚款，订单终止","action":"带品牌出货先要书面授权；知名卡通与商标图案一律不接","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 知识产权保护","confidence":"高","type":"法规"},{"id":"P009","category":"合同","doc":"违约损失赔偿范围（民法典 584）","rule":"一方违约，赔偿范围包含直接损失和订立合同时可预见的可得利益损失。","common_omission":"合同只写「承担违约责任」，没写日违约金率和封顶","consequence":"延期后客户按利润损失索赔，金额不可控","action":"合同写明「日万分之 X、封顶 X%」，把赔偿上限锁死","source":"https://flk.npc.gov.cn/","source_note":"国家法律法规数据库 → 搜《民法典》第五百八十四条","confidence":"高","type":"法规"},{"id":"P010","category":"合同","doc":"逾期履行补救规则（民法典 577）","rule":"不按约定时间履约，对方可以要求继续履行、赔偿损失，或者解除合同。","common_omission":"以为晚几天只是赔钱，忘了对方可以直接解除合同","consequence":"严重延期客户整单取消，货和钱都压住","action":"承诺交期前先算清最坏到港日；注定要晚就提前给客户方案，别等对方行使解除权","source":"https://flk.npc.gov.cn/","source_note":"国家法律法规数据库 → 搜《民法典》第五百七十七条","confidence":"高","type":"法规"},{"id":"P011","category":"合同","doc":"样品买卖质量要求（民法典 635）","rule":"凭样品成交的货物，交付质量必须与封存样品一致。","common_omission":"封样没有双方签字，出事各说各话","consequence":"大货与样品不一致，客户拒收并索赔","action":"封样双方签字、拍照存档，随大货留一箱对比样","source":"https://flk.npc.gov.cn/","source_note":"国家法律法规数据库 → 搜《民法典》第六百三十五条","confidence":"高","type":"法规"},{"id":"P012","category":"合同","doc":"出卖人交付单证义务（民法典 599）","rule":"卖方应当同步交付提单、发票、质检证、原产地证等配套单证。","common_omission":"出货只看货走没走，没人核单证齐不齐","consequence":"单证缺失，客户无法清关提货","action":"出货清单固定五件：提单、发票、装箱单、质检证、原产地证","source":"https://flk.npc.gov.cn/","source_note":"国家法律法规数据库 → 搜《民法典》第五百九十九条","confidence":"高","type":"法规"},{"id":"P013","category":"合同","doc":"CISG 根本违约（第 25 条）","rule":"延期或质量问题严重到剥夺买方合同预期利益，构成根本违约。","common_omission":"以为晚交只是赔违约金，不知道够严重可以整单拒收","consequence":"买方直接宣告合同无效、拒收货物","action":"延期超过合同约定宽限期就按根本违约风险处理，先备替代方案","source":"https://uncitral.un.org/","source_note":"UNCITRAL 官网 → 搜 CISG 第 25 条","confidence":"高","type":"法规"},{"id":"P014","category":"合同","doc":"CISG 延期损害赔偿（第 74 条）","rule":"违约方赔偿包括利润在内的损失，以订立合同时可预见为限。","common_omission":"报价时完全没算「误期会赔客户多少利润」","consequence":"索赔金额可能接近订单毛利","action":"报价时把「误期可能导致的客户利润损失」算进这一单的风险敞口","source":"https://uncitral.un.org/","source_note":"UNCITRAL 官网 → 搜 CISG 第 74 条","confidence":"高","type":"法规"},{"id":"P015","category":"商检","doc":"出口法定检验商品要求","rule":"列入法检目录的出口商品，检验合格后方可出口，不合格不得放行。","common_omission":"不知道自己这个品类在不在法检目录里","consequence":"货物扣关，订单延期","action":"出货前按 HS 查法检目录；在目录内的先报检再订舱","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 进出口商品检验","confidence":"高","type":"法规"},{"id":"P016","category":"商检","doc":"出口商品抽查检验管理","rule":"目录外商品海关也可随机抽查，不合格需处理并复检合格才能出口，无法处理的禁止出口。","common_omission":"抽检没有预留时间，抽中就打乱整个船期","consequence":"临时卡住出货，交期崩","action":"交期里留 3–5 天抽检缓冲；抽检不合格先隔离，绝不混装出货","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 进出口商品检验 → 抽查检验","confidence":"中","type":"法规"},{"id":"P017","category":"商检","doc":"出口包装检验要求","rule":"需要运输包装性能单的货物，包装检验合格才能出口。","common_omission":"临到装柜才发现包装没有性能单","consequence":"包装不合格，不能装船","action":"需要性能单的包装提前一周做检验，别和装柜挤在一起","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 进出口商品检验 → 包装检验","confidence":"中","type":"法规"},{"id":"P018","category":"商检","doc":"木质包装检疫规定（IPPC）","rule":"出口木质包装需加施 IPPC 熏蒸标识，无标识很多国家禁止入境。","common_omission":"用了实木托盘但没 IPPC 章，或用了带树皮的木料","consequence":"目的港扣货甚至销毁，整票连带","action":"木托盘只买带 IPPC 章的；或直接改用免熏蒸胶合板托盘","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 动植物检疫 → 木质包装","confidence":"高","type":"法规"},{"id":"P019","category":"商检","doc":"危险货物海运申报要求（IMDG）","rule":"危险品出口必须提前申报危报，包装与标签符合 IMDG 规范。","common_omission":"带电池、含液体粉末的货按普货订舱，没判危品","consequence":"未申报危险品：扣货、罚款、禁止出运","action":"含电池或液体粉末的先判是否危品；是危品提前 7 天报危","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 危险货物；规则文本见 IMDG Code","confidence":"高","type":"法规"},{"id":"P020","category":"商检","doc":"出口检验证单有效期规定","rule":"商检合格证书有有效期，超期未出货需重新报检。","common_omission":"证书过期了才发现，出货卡在最后一步","consequence":"无法正常报关出货","action":"证书有效期记进订单日历，到期前 10 天提醒","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 进出口商品检验；有效期以证书载明为准","confidence":"中","type":"法规"},{"id":"P021","category":"物流","doc":"海运提单物权效力规则（海商法）","rule":"正本提单是提货凭证，提单信息必须与货物、报关单一致。","common_omission":"提单收货人、件数、毛重和报关单对不上","consequence":"目的港无法提货，货在码头烧钱","action":"提单草稿和报关单逐字段对一遍（收货人、品名、件数、毛重）","source":"https://flk.npc.gov.cn/","source_note":"国家法律法规数据库 → 搜《海商法》","confidence":"高","type":"法规"},{"id":"P022","category":"物流","doc":"集装箱滞港费收取规则","rule":"货物到港后免费堆存期结束，码头开始收滞港费。","common_omission":"全员盯船期，没人盯目的港免堆期","consequence":"客户清关慢，滞港费高到超过利润","action":"到港前 3 天把清关资料发给客户，把免堆到期日写进订单主表","source":"http://www.customs.gov.cn/","source_note":"海关总署 / 各港口公布；费率以码头当期公告为准","confidence":"中","type":"法规"},{"id":"P023","category":"物流","doc":"集装箱免箱期与滞箱费","rule":"提柜后需在约定免箱期内还柜，超时按天收滞箱费。","common_omission":"生产延期没人算还柜日，费用悄悄累积","consequence":"滞箱费按天叠加，一票吃掉几百美元","action":"免箱到期日记进日历；还柜前 3 天确认能否还上","source":"http://www.customs.gov.cn/","source_note":"费率见各船公司运价本与提单条款","confidence":"中","type":"惯例"},{"id":"P024","category":"物流","doc":"船公司甩柜处理规则","rule":"舱位紧张时船公司有权甩柜，通常优先保障长期大客户舱位。","common_omission":"以为订了舱就一定能上船，没准备第二方案","consequence":"被甩柜只能顺延下一班，交期直接推一周以上","action":"旺季同时订两个航次备选；被甩柜当天改配并通知客户","source":"http://www.customs.gov.cn/","source_note":"见各船公司提单条款与订舱确认；属行业惯例，无统一法条","confidence":"低","type":"惯例"},{"id":"P025","category":"物流","doc":"截单时间要求","rule":"必须在船公司截单时间前提交提单资料，超时无法上本航次。","common_omission":"截单时间记在脑子里或聊天记录里，临点才发现","consequence":"错过截单，赶不上原定船期","action":"截单时间写进订单主表（不靠脑记）；提前 24 小时交提单资料","source":"http://www.customs.gov.cn/","source_note":"见船公司订舱确认（S/O）上的 SI cutoff","confidence":"中","type":"惯例"},{"id":"P026","category":"物流","doc":"出口货物退运监管规定","rule":"出口货物退运回国需提供质量问题证明，按流程申报。","common_omission":"货到港才想起找证明，资料凑不齐","consequence":"退运资料不全，货物滞留港口，费用极高","action":"退运前先备质量证明与不合格报告，别等货到港才找","source":"http://www.customs.gov.cn/","source_note":"海关总署 → 监管通关 → 退运货物","confidence":"中","type":"法规"},{"id":"P027","category":"结算","doc":"信用证单单一致原则（UCP600）","rule":"信用证结算下，所提交单据之间信息必须一致。","common_omission":"提单、发票、装箱单三处有一个字不一样","consequence":"单单不符，银行拒付货款","action":"L/C 单出货前做一次三单对照：提单、发票、装箱单","source":"http://www.customs.gov.cn/","source_note":"规则文本见 ICC UCP600；国内可查中国国际商会发布","confidence":"高","type":"法规"},{"id":"P028","category":"结算","doc":"信用证单证相符原则（UCP600）","rule":"提交单据内容必须与信用证条款完全一致。","common_omission":"漏交信用证要求的附加单据（如受益人证明、装船通知）","consequence":"单证不符，银行拒付，整单收不到钱","action":"把 L/C 条款逐条列成清单，交单前逐条打勾","source":"http://www.customs.gov.cn/","source_note":"规则文本见 ICC UCP600 第 14–16 条","confidence":"高","type":"法规"},{"id":"P029","category":"结算","doc":"外汇出口收汇申报要求","rule":"出口完成后需按规定做收汇申报，按时收汇。","common_omission":"收汇拖着不申报，进了异常名录才着急","consequence":"影响企业外汇名录分类，后续收汇更麻烦","action":"按属地外汇局要求的期限做收汇申报，别拖到季末","source":"https://www.safe.gov.cn/","source_note":"国家外汇管理局 → 政策法规；具体期限以属地外汇局要求为准","confidence":"中","type":"法规"},{"id":"P030","category":"结算","doc":"出口退税单证备案要求","rule":"办理出口退税需留存提单、合同、装箱单等资料备案。","common_omission":"单证随手放，退税时凑不齐","consequence":"无法退税，成本直接上升（退税率通常 9–13%）","action":"提单、合同、装箱单、报关单四件按单归档，退税申报期前完成","source":"http://www.chinatax.gov.cn/","source_note":"国家税务总局 → 出口退税；申报期限以当期公告为准","confidence":"中","type":"法规"}]};
+const CHANGES = {"as_of":"2026-11-21","generated_at":"2026-11-22T17:09:28+08:00","is_first_run":false,"demo":true,"summary":{"total":10,"new":1,"escalated":4,"persisted":1,"resolved":0},"new_red":[{"order_id":"ORD-2026-1107","customer":"Maison Lumiere SARL","country":"FR","product":"女装连衣裙","amount_usd":52000.0,"promised_date":"2027-01-08","etd_date":"2026-12-05","eta":"2027-01-09","pol":"上海","pod":"Le Havre","payment_term":"T/T","lc_expiry":"","delay_days":1,"days_to_deadline":48,"status":"red","penalty_usd":156.0,"total_loss_risk_usd":0.0,"exposure_usd":156.0,"reason":"预计 2027-01-09 到港，承诺 2027-01-08，晚 1 天","action":"申请客户延期 + 问船公司改配快船","action_en":"Ask buyer for extension + ask carrier for faster routing","days_in_red":1,"change":"今天刚变红"}],"escalated":[{"order_id":"ORD-2026-1109","customer":"Nordic Outdoor AB","country":"SE","product":"户外冲锋衣","amount_usd":119000.0,"promised_date":"2026-12-18","etd_date":"2026-11-27","eta":"2026-12-30","pol":"宁波","pod":"Gothenburg","payment_term":"L/C","lc_expiry":"2026-12-20","delay_days":12,"days_to_deadline":27,"status":"red","penalty_usd":7140.0,"total_loss_risk_usd":119000.0,"exposure_usd":126140.0,"reason":"预计 2026-12-30 到港，承诺 2026-12-18，晚 12 天","action":"到港日已超信用证有效期，整单拒付风险","action_en":"ETA past L/C expiry - whole payment at risk","days_in_red":3,"change":"已红 3 天，一直没处理"},{"order_id":"ORD-2026-1106","customer":"Southern Cross Workwear","country":"AU","product":"阻燃工装","amount_usd":138000.0,"promised_date":"2026-12-15","etd_date":"2026-11-30","eta":"2027-01-04","pol":"广州","pod":"Melbourne","payment_term":"T/T","lc_expiry":"","delay_days":20,"days_to_deadline":24,"status":"red","penalty_usd":13800.0,"total_loss_risk_usd":0.0,"exposure_usd":13800.0,"reason":"预计 2027-01-04 到港，承诺 2026-12-15，晚 20 天","action":"启动违约预案：报损、协商、备索赔资料","action_en":"Start breach protocol: report, negotiate, prep claim","days_in_red":3,"change":"已红 3 天，一直没处理"},{"order_id":"ORD-2026-1101","customer":"Nordwind Textil GmbH","country":"DE","product":"涤棉工装裤","amount_usd":84000.0,"promised_date":"2026-12-10","etd_date":"2026-11-22","eta":"2026-12-20","pol":"宁波","pod":"Hamburg","payment_term":"T/T","lc_expiry":"","delay_days":10,"days_to_deadline":19,"status":"red","penalty_usd":2520.0,"total_loss_risk_usd":0.0,"exposure_usd":2520.0,"reason":"预计 2026-12-20 到港，承诺 2026-12-10，晚 10 天","action":"启动违约预案：报损、协商、备索赔资料","action_en":"Start breach protocol: report, negotiate, prep claim","days_in_red":3,"change":"已红 3 天，一直没处理"},{"order_id":"ORD-2026-1103","customer":"山田繊維株式会社","country":"JP","product":"功能性面料","amount_usd":42000.0,"promised_date":"2026-12-20","etd_date":"2026-11-28","eta":"2026-12-27","pol":"青岛","pod":"Tokyo","payment_term":"T/T","lc_expiry":"","delay_days":7,"days_to_deadline":29,"status":"red","penalty_usd":588.0,"total_loss_risk_usd":0.0,"exposure_usd":588.0,"reason":"预计 2026-12-27 到港，承诺 2026-12-20，晚 7 天","action":"申请客户延期 + 问船公司改配快船","action_en":"Ask buyer for extension + ask carrier for faster routing","days_in_red":3,"change":"已红 3 天，一直没处理"}],"resolved":[],"persisted":[{"order_id":"ORD-2026-1110","customer":"Cebu Fashion Corp","country":"PH","product":"休闲裤","amount_usd":45000.0,"promised_date":"2026-12-30","etd_date":"2026-12-02","eta":"2027-01-02","pol":"深圳","pod":"Cebu","payment_term":"T/T","lc_expiry":"","delay_days":3,"days_to_deadline":39,"status":"red","penalty_usd":405.0,"total_loss_risk_usd":0.0,"exposure_usd":405.0,"reason":"预计 2027-01-02 到港，承诺 2026-12-30，晚 3 天","action":"申请客户延期 + 问船公司改配快船","action_en":"Ask buyer for extension + ask carrier for faster routing","days_in_red":2,"change":"还在红，第 2 天"}],"run_log":[{"at":"2026-11-19","new":4,"escalated":0,"resolved":0,"persisted":0},{"at":"2026-11-20","new":1,"escalated":0,"resolved":0,"persisted":4},{"at":"2026-11-21","new":1,"escalated":4,"resolved":0,"persisted":1}],"trace":[{"step":"加载订单","tool":"orders.json","ms":1,"detail":"10 票"},{"step":"推进船期","tool":"DRIFT_PER_DAY","ms":1,"detail":"6 票预计到港顺延"},{"step":"算风险","tool":"calc_risk.compute","ms":1,"detail":"10 票 → 6 红 1 黄 3 绿"},{"step":"读记忆","tool":"state/memory.json","ms":1,"detail":"上次 2026-11-20"},{"step":"比对变化","tool":"plan()","ms":1,"detail":"新 1 / 升级 4 / 仍在红 1 / 无变化 4"},{"step":"写简报","tool":"changes.json","ms":1,"detail":"1 条新红"}]};
+const HISTORY = [{"as_of":"2026-11-19","summary":{"total":10,"red":4,"yellow":3,"green":3,"exposure_usd":139295.0},"change":{"new":["ORD-2026-1109","ORD-2026-1106","ORD-2026-1101","ORD-2026-1103"],"escalated":[],"persisted":[],"resolved":[]},"orders":[{"order_id":"ORD-2026-1109","country":"SE","status":"red","exposure_usd":124355.0,"delay_days":9,"reason":"预计 2026-12-27 到港，承诺 2026-12-18，晚 9 天"},{"order_id":"ORD-2026-1106","country":"AU","status":"red","exposure_usd":12420.0,"delay_days":18,"reason":"预计 2027-01-02 到港，承诺 2026-12-15，晚 18 天"},{"order_id":"ORD-2026-1101","country":"DE","status":"red","exposure_usd":2016.0,"delay_days":8,"reason":"预计 2026-12-18 到港，承诺 2026-12-10，晚 8 天"},{"order_id":"ORD-2026-1103","country":"JP","status":"red","exposure_usd":504.0,"delay_days":6,"reason":"预计 2026-12-26 到港，承诺 2026-12-20，晚 6 天"},{"order_id":"ORD-2026-1107","country":"FR","status":"yellow","exposure_usd":0.0,"delay_days":-2,"reason":"预计 2027-01-06 到港，距承诺日仅 2 天"},{"order_id":"ORD-2026-1108","country":"AE","status":"yellow","exposure_usd":0.0,"delay_days":-2,"reason":"预计 2026-12-20 到港，距承诺日仅 2 天"},{"order_id":"ORD-2026-1110","country":"PH","status":"yellow","exposure_usd":0.0,"delay_days":-1,"reason":"预计 2026-12-29 到港，距承诺日仅 1 天"},{"order_id":"ORD-2026-1102","country":"US","status":"green","exposure_usd":0.0,"delay_days":-3,"reason":"预计 2026-12-02 到港，早于承诺日 3 天"},{"order_id":"ORD-2026-1104","country":"BR","status":"green","exposure_usd":0.0,"delay_days":-5,"reason":"预计 2027-01-05 到港，早于承诺日 5 天"},{"order_id":"ORD-2026-1105","country":"VN","status":"green","exposure_usd":0.0,"delay_days":-4,"reason":"预计 2026-12-24 到港，早于承诺日 4 天"}]},{"as_of":"2026-11-20","summary":{"total":10,"red":5,"yellow":2,"green":3,"exposure_usd":141646.0},"change":{"new":["ORD-2026-1110"],"escalated":[],"persisted":["ORD-2026-1109","ORD-2026-1106","ORD-2026-1101","ORD-2026-1103"],"resolved":[]},"orders":[{"order_id":"ORD-2026-1109","country":"SE","status":"red","exposure_usd":125545.0,"delay_days":11,"reason":"预计 2026-12-29 到港，承诺 2026-12-18，晚 11 天"},{"order_id":"ORD-2026-1106","country":"AU","status":"red","exposure_usd":13110.0,"delay_days":19,"reason":"预计 2027-01-03 到港，承诺 2026-12-15，晚 19 天"},{"order_id":"ORD-2026-1101","country":"DE","status":"red","exposure_usd":2268.0,"delay_days":9,"reason":"预计 2026-12-19 到港，承诺 2026-12-10，晚 9 天"},{"order_id":"ORD-2026-1103","country":"JP","status":"red","exposure_usd":588.0,"delay_days":7,"reason":"预计 2026-12-27 到港，承诺 2026-12-20，晚 7 天"},{"order_id":"ORD-2026-1110","country":"PH","status":"red","exposure_usd":135.0,"delay_days":1,"reason":"预计 2026-12-31 到港，承诺 2026-12-30，晚 1 天"},{"order_id":"ORD-2026-1107","country":"FR","status":"yellow","exposure_usd":0.0,"delay_days":0,"reason":"预计 2027-01-08 到港，距承诺日仅 0 天"},{"order_id":"ORD-2026-1108","country":"AE","status":"yellow","exposure_usd":0.0,"delay_days":-2,"reason":"预计 2026-12-20 到港，距承诺日仅 2 天"},{"order_id":"ORD-2026-1102","country":"US","status":"green","exposure_usd":0.0,"delay_days":-3,"reason":"预计 2026-12-02 到港，早于承诺日 3 天"},{"order_id":"ORD-2026-1104","country":"BR","status":"green","exposure_usd":0.0,"delay_days":-5,"reason":"预计 2027-01-05 到港，早于承诺日 5 天"},{"order_id":"ORD-2026-1105","country":"VN","status":"green","exposure_usd":0.0,"delay_days":-4,"reason":"预计 2026-12-24 到港，早于承诺日 4 天"}]},{"as_of":"2026-11-21","summary":{"total":10,"red":6,"yellow":1,"green":3,"exposure_usd":143609.0},"change":{"new":["ORD-2026-1107"],"escalated":["ORD-2026-1109","ORD-2026-1106","ORD-2026-1101","ORD-2026-1103"],"persisted":["ORD-2026-1110"],"resolved":[]},"orders":[{"order_id":"ORD-2026-1109","country":"SE","status":"red","exposure_usd":126140.0,"delay_days":12,"reason":"预计 2026-12-30 到港，承诺 2026-12-18，晚 12 天"},{"order_id":"ORD-2026-1106","country":"AU","status":"red","exposure_usd":13800.0,"delay_days":20,"reason":"预计 2027-01-04 到港，承诺 2026-12-15，晚 20 天"},{"order_id":"ORD-2026-1101","country":"DE","status":"red","exposure_usd":2520.0,"delay_days":10,"reason":"预计 2026-12-20 到港，承诺 2026-12-10，晚 10 天"},{"order_id":"ORD-2026-1103","country":"JP","status":"red","exposure_usd":588.0,"delay_days":7,"reason":"预计 2026-12-27 到港，承诺 2026-12-20，晚 7 天"},{"order_id":"ORD-2026-1110","country":"PH","status":"red","exposure_usd":405.0,"delay_days":3,"reason":"预计 2027-01-02 到港，承诺 2026-12-30，晚 3 天"},{"order_id":"ORD-2026-1107","country":"FR","status":"red","exposure_usd":156.0,"delay_days":1,"reason":"预计 2027-01-09 到港，承诺 2027-01-08，晚 1 天"},{"order_id":"ORD-2026-1108","country":"AE","status":"yellow","exposure_usd":0.0,"delay_days":-2,"reason":"预计 2026-12-20 到港，距承诺日仅 2 天"},{"order_id":"ORD-2026-1102","country":"US","status":"green","exposure_usd":0.0,"delay_days":-3,"reason":"预计 2026-12-02 到港，早于承诺日 3 天"},{"order_id":"ORD-2026-1104","country":"BR","status":"green","exposure_usd":0.0,"delay_days":-5,"reason":"预计 2027-01-05 到港，早于承诺日 5 天"},{"order_id":"ORD-2026-1105","country":"VN","status":"green","exposure_usd":0.0,"delay_days":-4,"reason":"预计 2026-12-24 到港，早于承诺日 4 天"}]}];
+
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const money = n => '$' + fmt(n);
+
+let current = 'overview';
+let focusId = null;
+
+function statusLabel(s){
+  return s==='red' ? '已注定违约' : s==='yellow' ? '缓冲不足' : '正常';
+}
+
+function renderHeader(){
+  $('#m-asof').textContent = DATA.as_of;
+  $('#m-gen').textContent = (DATA.generated_at||'').slice(0,16).replace('T',' ');
+  const fx = DATA.market && DATA.market.fx ? DATA.market.fx : null;
+  $('#m-fx').textContent = fx ? ('USD/CNY ' + fx) : '';
+  $('#m-src').textContent = DATA.source || '';
+  $('#s-total').textContent = String(DATA.summary.total);
+  $('#s-red').textContent = String(DATA.summary.red);
+  $('#s-yellow').textContent = String(DATA.summary.yellow);
+  $('#s-exp').textContent = money(DATA.summary.exposure_usd);
+}
+
+function renderOverview(){
+  const el = $('#view-overview');
+  const orders = DATA.orders || [];
+  if(!orders.length){ el.innerHTML = '<div class="empty">没有订单数据</div>'; return; }
+  const maxExp = Math.max(1, ...orders.map(o => Number(o.exposure_usd) || 0));
+  el.innerHTML = '<div class="grid">' + orders.map(o => {
+    const w = Math.max(2, Math.round((Number(o.exposure_usd) || 0) / maxExp * 100));
+    return `
+    <div class="card ${o.status}" data-id="${o.order_id}">
+      <div class="top">
+        <span class="id">${o.order_id}</span>
+        <span class="dot ${o.status}"></span>
+      </div>
+      <h3>${o.customer}</h3>
+      <div class="prod">${o.country} · ${o.product}</div>
+      <div class="row">
+        <div>
+          <div class="label">敞口</div>
+          <div class="amt">${o.exposure_usd>0?money(o.exposure_usd):'—'}</div>
+        </div>
+        <div class="delay ${o.delay_days>0?'neg':'pos'}">
+          ${o.delay_days>0?('晚 '+o.delay_days+' 天'):(o.status==='yellow'?('缓冲仅 '+Math.abs(o.delay_days)+' 天'):('早 '+Math.abs(o.delay_days)+' 天'))}
+        </div>
+      </div>
+      <div class="bar"><i style="width:${w}%"></i></div>
+      <div class="foot">
+        <span class="badge ${o.status}">${statusLabel(o.status)}</span>
+        <span>${o.promised_date} → ${o.eta}</span>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+
+  el.querySelectorAll('.card').forEach(c => {
+    c.addEventListener('click', () => { focusId = c.dataset.id; switchView('detail'); });
+  });
+}
+
+function timeline(o){
+  const d = s => new Date(s + 'T00:00:00');
+  const etd = d(o.etd_date || ''), eta = d(o.eta), prom = d(o.promised_date);
+  // fallback: use eta/promised only when etd missing
+  const start = (o.etd_date ? etd : prom);
+  const total = Math.max((eta - start) / 86400000, 1);
+  const pProm = Math.min(Math.max((prom - start) / 86400000 / total, 0), 1) * 100;
+  const pOver = o.delay_days > 0 ? pProm : null;
+  return `
+    <div class="tl-track">
+      <div class="tl-fill" style="width:${o.delay_days>0?pProm:100}%"></div>
+      ${o.delay_days>0?`<div class="tl-over" style="left:${pProm}%;width:${100-pProm}%"></div>`:''}
+      <div class="tl-pt etd first" style="left:0%">
+        <div class="pin"></div><div class="lb">装船</div><div class="dt">${o.etd_date||'—'}</div>
+      </div>
+      <div class="tl-pt promised" style="left:${pProm}%">
+        <div class="pin"></div><div class="lb">承诺到货</div><div class="dt">${o.promised_date}</div>
+      </div>
+      <div class="tl-pt eta last" style="left:100%">
+        <div class="pin"></div><div class="lb">预计到港</div><div class="dt">${o.eta}</div>
+      </div>
+    </div>
+    `;
+}
+
+function policyRows(list){
+  return list.map(p => `
+    <div class="pol-item">
+      <div class="pol-h">
+        <span class="pol-cat">${p.category || ''}</span>
+        <span class="pol-doc">${p.doc || ''}</span>
+        ${p.type === '惯例' ? '<span class="pol-tag">惯例</span>' : ''}
+      </div>
+      <div class="pol-om">最容易漏：<b>${p.common_omission || ''}</b></div>
+      <div class="pol-act">${p.action || ''}</div>
+      ${p.confidence === '低' ? '<div class="pol-low">这条置信度低，发货前请自行核对官方原文</div>' : ''}
+    </div>`).join('');
+}
+
+/* 出门前：按这一单的实际条款挑 4 条，不是把 30 条全倒出来 */
+function cnPolicies(o){
+  const all = (POLICYCN && Array.isArray(POLICYCN.items)) ? POLICYCN.items : [];
+  if(!all.length) return [];
+  const byId = {};
+  all.forEach(p => { byId[p.id] = p; });
+  const lc = /L\/C|信用证|D\/P|D\/A/i.test(String(o.payment_term || ''));
+  const ids = ['P025', 'P001'];
+  if(lc) ids.push('P027', 'P028');
+  else ids.push('P009', 'P010');
+  if(/sea|ocean|海运|海運/i.test(String(o.transport || '')) || !o.transport) ids.push('P024', 'P022');
+  else ids.push('P012');
+  const out = [], seen = {};
+  for(const id of ids){
+    const it = byId[id];
+    if(it && !seen[id]){ seen[id] = 1; out.push(it); }
+    if(out.length >= 4) break;
+  }
+  return out;
+}
+
+function cnBlock(o){
+  const list = cnPolicies(o);
+  if(!list.length) return '';
+  const asOf = (POLICYCN && POLICYCN._asOf) || '';
+  return `
+    <div class="pol cn">
+      <div class="k"><span>出门前：这一单最容易漏的 ${list.length} 件事</span><em>中国出口侧 ${asOf} · 需人工复核</em></div>
+      ${policyRows(list)}
+    </div>`;
+}
+
+function policyBlock(o){
+  let list = [];
+  if(typeof POLICY === 'object' && POLICY){
+    list = POLICY[o.country] || [];
+    if(!list.length && Array.isArray(POLICY._euCodes) && POLICY._euCodes.indexOf(o.country) >= 0){
+      list = POLICY._eu || [];
+    }
+  }
+  if(!list.length) return '';
+  return `
+    <div class="pol">
+      <div class="k"><span>到岸后：发这个国家最容易漏的 ${list.length} 件事</span><em>目的国规则库 ${(POLICY && POLICY._asOf) || ''} · 需人工复核</em></div>
+      ${policyRows(list)}
+    </div>`;
+}
+
+function renderDetail(){
+  const el = $('#view-detail');
+  const orders = DATA.orders || [];
+  const o = orders.find(x => x.order_id === focusId) || orders[0];
+  if(!o){ el.innerHTML = '<div class="empty">没有订单</div>'; return; }
+
+  const pen = o.penalty_usd > 0 ? money(o.penalty_usd) : '—';
+  const lc  = o.total_loss_risk_usd > 0 ? money(o.total_loss_risk_usd) : '—';
+
+  el.innerHTML = `
+    <button class="back" id="btn-back">← 返回总览</button>
+    <div class="detail-head">
+      <div>
+        <h2>${o.customer}</h2>
+        <div class="who">${o.order_id} · ${o.country} · ${o.product} · ${money(o.amount_usd)}</div>
+      </div>
+      <div class="exposure">
+        <div class="k">风险敞口</div>
+        <div class="v">${o.exposure_usd>0?money(o.exposure_usd):'—'}</div>
+      </div>
+    </div>
+
+    <div class="timeline">${timeline(o)}</div>
+
+    <div class="facts">
+      <div class="fact">
+        <div class="k">违约金</div>
+        <div class="v" style="color:${o.penalty_usd>0?'var(--red)':'var(--dim2)'}">${pen}</div>
+        <div class="n">货值 × 日费率 × 违约天数，封顶按合同</div>
+      </div>
+      <div class="fact">
+        <div class="k">整单拒付风险</div>
+        <div class="v" style="color:${o.total_loss_risk_usd>0?'var(--red)':'var(--dim2)'}">${lc}</div>
+        <div class="n">信用证到期 / 装运期不符时触发</div>
+      </div>
+      <div class="fact">
+        ${o.delay_days>0
+          ? `<div class="k">已经晚了</div>
+             <div class="v" style="color:var(--red)">${o.delay_days} 天</div>
+             <div class="n">承诺 ${o.promised_date} · 预计 ${o.eta}</div>`
+          : `<div class="k">距承诺日</div>
+             <div class="v" style="color:${o.days_to_deadline<3?'var(--amber)':'var(--text)'}">${o.days_to_deadline} 天</div>
+             <div class="n">还有多少时间能动手</div>`}
+      </div>
+    </div>
+
+    <div class="why">
+      <div class="k">为什么判这个状态</div>
+      <div class="v">${o.reason}</div>
+    </div>
+
+    <div class="act">
+      <div class="k">现在该做什么</div>
+      <div class="v">${o.action}</div>
+    </div>
+    ${cnBlock(o)}
+    ${policyBlock(o)}`;
+
+  $('#btn-back').addEventListener('click', () => switchView('overview'));
+}
+
+/* ---- 三天回放：证明「记忆」不是口号 ---- */
+let replayIdx = null;   /* null = 最新一天 */
+function replayStrip(){
+  if(!Array.isArray(HISTORY) || HISTORY.length < 2) return '';
+  const cur = (replayIdx === null) ? HISTORY.length - 1 : replayIdx;
+  const s = HISTORY[cur];
+  const ch = s.change || {};
+  const fmt = d => d.slice(5);
+  const chips = HISTORY.map((h, i) => `
+      <button class="rp-chip${i === cur ? ' on' : ''}" data-i="${i}">
+        <span class="rp-d">${fmt(h.as_of)}</span>
+        <span class="rp-r">${h.summary.red}<i>红</i></span>
+        <span class="rp-m">${money(h.summary.exposure_usd)}</span>
+      </button>`).join('<span class="rp-arrow">→</span>');
+
+  const first = HISTORY[0], last = HISTORY[HISTORY.length - 1];
+  const ids = arr => (arr || []).join(' · ') || '—';
+  const rows = [
+    ['新红', ids(ch.new), 'red'],
+    ['升级（拖三天以上）', ids(ch.escalated), 'amber'],
+    ['仍在红', ids(ch.persisted), 'gray'],
+    ['已解除', ids(ch.resolved), 'green']
+  ].filter(r => r[1] !== '—').map(r => `
+      <div class="rp-row"><span class="rp-k ${r[2]}">${r[0]}</span><span class="rp-v">${r[1]}</span></div>`).join('');
+
+  return `
+    <div class="rp">
+      <div class="rp-head">
+        <span class="rp-t">三天回放</span>
+        <span class="rp-hint">同十票货，它每天只跟昨天比一次 · 点日期换一天</span>
+      </div>
+      <div class="rp-chips">${chips}</div>
+      <div class="rp-delta">${fmt(first.as_of)} 红 ${first.summary.red} 票、敞口 ${money(first.summary.exposure_usd)}
+        &nbsp;→&nbsp; ${fmt(last.as_of)} 红 ${last.summary.red} 票、敞口 ${money(last.summary.exposure_usd)}
+        <span class="rp-note">（风险不是一次性出现的，是每天醒一点）</span></div>
+      ${rows || '<div class="rp-row"><span class="rp-k gray">当天</span><span class="rp-v">没有变化</span></div>'}
+    </div>`;
+}
+
+function renderBrief(){
+  const el = $('#view-brief');
+  const reds = (DATA.orders||[]).filter(o => o.status === 'red');
+
+  /* ---- 有巡检记忆：只报变化 ---- */
+  if(CHANGES && !CHANGES.is_first_run){
+    const sec = (key, title, hint, cls) => {
+      const items = CHANGES[key] || [];
+      if(!items.length) return '';
+      const rows = items.map(o => `
+        <div class="bucket-item" data-oid="${o.order_id}">
+          <div class="bi-body">
+            <div class="t">${o.order_id} · ${o.customer}</div>
+            <div class="s">${o.change}${o.reason ? ' · ' + o.reason : ''}</div>
+          </div>
+          <span class="bi-money">${money(o.exposure_usd)}</span>
+        </div>`).join('');
+      return `<div class="bucket">
+        <div class="bucket-head">
+          <span class="bh-dot ${cls}"></span>
+          <span class="bh-t">${title}</span>
+          <span class="bh-n">${items.length}</span>
+          <span class="bh-hint">${hint}</span>
+        </div>${rows}</div>`;
+    };
+
+    const body = sec('new_red','今天变了','昨天还没红，今天红了','red')
+               + sec('escalated','拖了三天以上','一直没处理，该升级了','amber')
+               + sec('persisted','还在跟','已经在处理，不重复喊','gray')
+               + sec('resolved','解除了','风险已消除','green');
+
+    const rounds = (CHANGES.run_log||[]).length;
+    const tr = CHANGES.trace || [];
+    const totalMs = tr.reduce((a, b) => a + (b.ms || 0), 0);
+    const trace = tr.length ? `
+      <details class="trace">
+        <summary>这一轮它干了什么 · ${tr.length} 步 · 共 ${totalMs}ms</summary>
+        <div class="trace-flow">
+          ${tr.map((t, i) => `
+            <div class="tf-step">
+              <span class="tf-ms">${t.ms}ms</span>
+              <div class="tf-n">${String(i + 1).padStart(2, '0')}</div>
+              <div class="tf-s">${t.step}</div>
+              <div class="tf-d">${t.detail}</div>
+            </div>`).join('')}
+        </div>
+      </details>` : '';
+
+    el.innerHTML = `
+      ${replayStrip()}
+      <div class="brief-head">
+        <h2>今早简报</h2>
+        <p>${CHANGES.as_of} · 第 ${rounds} 次巡检 · ${CHANGES.summary.total} 票在跟 · 只说了变的</p>
+      </div>
+      ${trace}
+      ${body || '<div class="empty">今天没有变化，一切照旧</div>'}
+      <div class="brief-total">
+        <span class="k">合计敞口</span>
+        <span class="v">${money(DATA.summary.exposure_usd)}</span>
+      </div>`;
+
+    el.querySelectorAll('.bucket-item').forEach(b => {
+      b.addEventListener('click', () => { focusId = b.dataset.oid; switchView('detail'); });
+    });
+    el.querySelectorAll('.rp-chip').forEach(b => {
+      b.addEventListener('click', () => { replayIdx = Number(b.dataset.i); renderBrief(); });
+    });
+    if(/trace=1/.test(location.search)){
+      const td = el.querySelector('details.trace');
+      if(td) td.open = true;
+    }
+    return;
+  }
+
+  /* ---- 首次巡检 / 无记忆：平铺全量 ---- */
+  if(!reds.length){ el.innerHTML = '<div class="empty">今天没有红灯订单</div>'; return; }
+  el.innerHTML = `
+    <div class="brief-head">
+      <h2>今早简报</h2>
+      <p>${DATA.as_of} · 这 ${reds.length} 票今天要动${CHANGES?' · 首次巡检，先给你全量':''}</p>
+    </div>
+    <div class="brief-list">
+      ${reds.map((o,i) => `
+        <div class="brief-item">
+          <span class="num">${String(i+1).padStart(2,'0')}</span>
+          <div class="body">
+            <div class="t">${o.customer} · ${o.order_id}</div>
+            <div class="s">${o.action}</div>
+          </div>
+          <span class="money">${money(o.exposure_usd)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="brief-total">
+      <span class="k">合计敞口</span>
+      <span class="v">${money(DATA.summary.exposure_usd)}</span>
+    </div>`;
+}
+
+/* ================= 贴邮件 · 第四屏 ================= */
+
+const FUZZY = /(approximately|approx\.?|around|about|roughly|some\s+\d|大约|约\s*\d|およそ|だいたい|近く)/i;
+const SHIP_KW = /(ship\s*(?:by|before|on)|ETD|装运|出荷|船期)/i;
+const ARRIVE_KW = /(arrive|deliver(?:y)?\s*(?:by|before|on)|到港|到货|納期|着荷)/i;
+const SOFT_KW = /(tentative|tbd|cannot confirm|subject to|待定|未定)/i;
+const FIELD_LABEL = {
+  qty:'数量', amount_usd:'金额 USD', promised_date:'承诺到货日',
+  payment_term:'付款方式', unit_price_usd:'单价 USD'
+};
+const MONTHS = {january:1,february:2,march:3,april:4,may:5,june:6,
+  july:7,august:8,september:9,october:10,november:11,december:12};
+
+function nearNum(text, num, win){
+  win = win || 90;
+  if(num === null || num === undefined || num === '') return false;
+  const n = Number(num);
+  if(!isFinite(n)) return false;
+  const cands = [String(Math.trunc(n)), Math.trunc(n).toLocaleString('en-US')];
+  for(let c = 0; c < cands.length; c++){
+    const s = cands[c];
+    let i = text.indexOf(s);
+    while(i !== -1){
+      if(FUZZY.test(text.slice(Math.max(0, i - win), i + win))) return true;
+      i = text.indexOf(s, i + 1);
+    }
+  }
+  return false;
+}
+
+function isoOf(mon, d, y){
+  const m = MONTHS[String(mon).toLowerCase()];
+  return m ? (y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0')) : null;
+}
+
+function coarseExtract(body){
+  const out = { qty:null, amount_usd:null, promised_date:null, payment_term:null, unit_price_usd:null };
+  let m = body.match(/([\d][\d,]*)\s*(?:pcs|pieces|units|件)/i);
+  if(m) out.qty = Number(m[1].replace(/,/g,''));
+  m = body.match(/(?:USD|US\$|\$)\s*([\d][\d,]*(?:\.\d+)?)/i) ||
+      body.match(/([\d][\d,]*(?:\.\d+)?)\s*(?:USD|美元)/i);
+  if(m) out.amount_usd = Number(m[1].replace(/,/g,''));
+  m = body.match(/(\d{4}-\d{2}-\d{2})/);
+  if(m) out.promised_date = m[1];
+  else {
+    m = body.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/i);
+    if(m) out.promised_date = isoOf(m[1], +m[2], +m[3]);
+  }
+  m = body.match(/\b(T\/T|L\/C|D\/P)\b/i);
+  if(m) out.payment_term = m[1].toUpperCase();
+  return out;
+}
+
+// 一封邮件里出现多个日期时，承诺到货日取最晚那个
+function suggestedDate(body){
+  const all = [];
+  let m;
+  const re1 = /(\d{4}-\d{2}-\d{2})/g;
+  while((m = re1.exec(body))) all.push(m[1]);
+  const re2 = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/gi;
+  while((m = re2.exec(body))){
+    const v = isoOf(m[1], +m[2], +m[3]);
+    if(v) all.push(v);
+  }
+  if(!all.length) return null;
+  all.sort();
+  return all[all.length - 1];
+}
+
+function judgeFlags(body, vals){
+  const f = {};
+  if(vals.qty != null && nearNum(body, vals.qty))
+    f.qty = '原文用 approximately / 约 这类词修饰了数量，这不是一个确定的数';
+  if(SHIP_KW.test(body) && ARRIVE_KW.test(body))
+    f.promised_date = '同时出现装运日和到港日两个概念，承诺到货日应当是后面那个';
+  else if(SOFT_KW.test(body) && !vals.promised_date)
+    f.promised_date = '客户没给确定交期（tentative / TBD / cannot confirm）';
+  const up = vals.unit_price_usd, q = vals.qty, amt = vals.amount_usd;
+  if(up && q && amt){
+    const calc = up * q;
+    if(calc && Math.abs(calc - amt) / calc > 0.005)
+      f.amount_usd = '单价 × 数量 = ' + calc.toFixed(2) + '，和邮件里的金额 ' + amt.toFixed(2) + ' 对不上';
+  }
+  const keys = ['qty','amount_usd','promised_date','payment_term'];
+  if(keys.filter(k => vals[k] != null).length <= 1)
+    f.__whole__ = '四个关键字段只有一个有值，这更像询价，不像订单';
+  return f;
+}
+
+let pasteVals = null;
+
+function renderPaste(){
+  const el = $('#view-paste');
+  if(el.dataset.ready) return;
+  el.dataset.ready = '1';
+  const chips = (MAILS.mails || []).slice(0, 7).map((m, i) =>
+    '<button class="chip" data-i="' + i + '">' + m.order_id +
+    (m.group === 'trap' ? ' · 陷阱' : '') + '</button>').join('');
+  el.innerHTML =
+    '<div class="paste-wrap">' +
+      '<div class="paste-pane">' +
+        '<div class="pane-head">客户来信 <span class="hint">粘贴原邮件正文</span></div>' +
+        '<textarea id="paste-body" placeholder="把客户邮件正文贴在这里……"></textarea>' +
+        '<div class="paste-samples"><span class="hint">载入样例：</span>' + chips + '</div>' +
+        '<div class="paste-actions"><button id="btn-parse" class="btn-primary">解析</button>' +
+        '<button id="btn-clear" class="btn-ghost">清空</button></div>' +
+      '</div>' +
+      '<div class="paste-pane" id="paste-result"><div class="empty">左边贴一段邮件，点「解析」</div></div>' +
+    '</div>';
+
+  el.querySelectorAll('.chip').forEach(b => {
+    b.addEventListener('click', () => {
+      const m = MAILS.mails[+b.dataset.i];
+      $('#paste-body').value = m.body;
+      doParse(m);
+    });
+  });
+  $('#btn-parse').addEventListener('click', () => {
+    const body = $('#paste-body').value.trim();
+    if(!body) return;
+    doParse(null);
+  });
+  $('#btn-clear').addEventListener('click', () => {
+    $('#paste-body').value = '';
+    $('#paste-result').innerHTML = '<div class="empty">左边贴一段邮件，点「解析」</div>';
+    pasteVals = null;
+  });
+
+  // 截图 / 演示直达：?p=6#paste 自动载入第 7 封并解析
+  const _p = new URLSearchParams(location.search).get('p');
+  if(_p !== null && MAILS.mails && MAILS.mails[+_p]){
+    const m = MAILS.mails[+_p];
+    $('#paste-body').value = m.body;
+    doParse(m);
+  }
+}
+
+function doParse(known){
+  const body = $('#paste-body').value.trim();
+  let vals, source, meta = null;
+
+  if(known && MAILS.parsed && MAILS.parsed[known.order_id]){
+    vals = Object.assign({}, MAILS.parsed[known.order_id]);
+    source = '预置样例 · 模型抽取结果（离线快照）';
+    meta = (MAILS.meta || {})[known.order_id] || null;
+  } else {
+    const hit = (MAILS.mails || []).find(m =>
+      body.slice(0, 80).trim() === m.body.slice(0, 80).trim());
+    if(hit && MAILS.parsed && MAILS.parsed[hit.order_id]){
+      vals = Object.assign({}, MAILS.parsed[hit.order_id]);
+      source = '匹配到样例 · 模型抽取结果（离线快照）';
+      meta = (MAILS.meta || {})[hit.order_id] || null;
+    } else {
+      vals = coarseExtract(body);
+      source = '本地规则粗抽 · 未接模型，字段仅供参考';
+    }
+  }
+
+  pasteVals = vals;
+  renderParsed(vals, judgeFlags(body, vals), source, body, meta);
+}
+
+function renderParsed(vals, flags, source, body, meta){
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const kind = /模型/.test(source || '') ? 'ai' : 'rule';
+  const amb = Object.keys(flags).filter(k => k !== '__whole__');
+  const whole = flags.__whole__;
+  const keyN = ['qty','amount_usd','promised_date','payment_term'].filter(k => vals[k] != null).length;
+
+  const srcTag = (bad, miss) => {
+    if(miss) return '<span class="tag tag-miss">没有</span>';
+    if(kind === 'rule') return bad ? '<span class="tag tag-amb">规则抽 · 可疑</span>'
+                                   : '<span class="tag tag-rule">规则抽</span>';
+    return bad ? '<span class="tag tag-amb">AI 抽 · 可疑</span>'
+               : '<span class="tag tag-ai">AI 抽</span>';
+  };
+
+  const rows = ['qty','amount_usd','promised_date','payment_term','unit_price_usd'].map(k => {
+    const v = vals[k];
+    const bad = !!flags[k];
+    const miss = (v === null || v === undefined || v === '');
+    const cls = bad ? 'row-amb' : (miss ? 'row-miss' : 'row-ok');
+    const tag = srcTag(bad, miss);
+    const sugDate = (k === 'promised_date') ? suggestedDate(body) : null;
+    const sug = sugDate ? '<button class="chip sug" data-sug="' + sugDate + '">改用 ' + sugDate + '</button>' : '';
+    return '<div class="field ' + cls + '">' +
+      '<div class="field-k"><span>' + FIELD_LABEL[k] + '</span>' + tag + '</div>' +
+      '<div class="field-v"><input data-k="' + k + '" value="' +
+        (miss ? '' : String(v)) + '" placeholder="' + (miss ? '未抽取' : '') + '" /></div>' +
+      (bad ? '<div class="field-why">' + flags[k] + ' ' + sug + '</div>' : '') +
+    '</div>';
+  }).join('');
+
+  let how = '';
+  if(kind === 'ai' && meta && (meta.ai || meta.raw)){
+    const ai = meta.ai || {};
+    const u = ai.usage || {};
+    how = '<details class="ai-how"><summary>它是怎么读的 · 这一步是模型在干活</summary>' +
+      '<div class="ah-grid">' +
+        '<div><b>模型</b><span>' + esc(ai.model || '-') + '</span></div>' +
+        '<div><b>耗时</b><span>' + (ai.ms ? (ai.ms / 1000).toFixed(1) + ' 秒' : '-') + '</span></div>' +
+        '<div><b>Token</b><span>' + (u.prompt_tokens || 0) + ' 进 / ' + (u.completion_tokens || 0) + ' 出</span></div>' +
+        '<div><b>响应 ID</b><span>' + esc(ai.id || '-') + '</span></div>' +
+      '</div>' +
+      '<pre class="ah-raw">' + (meta.raw ? esc(meta.raw) : '(这封信没留原始回复)') + '</pre>' +
+      '<p class="ah-note">上面是模型当场返回的原文。它可能读错——所以每个字段后面都标了是谁给的、可不可疑。读错的那部分，规则会抓住并标黄，等你确认。</p>' +
+    '</details>';
+  }
+
+  $('#paste-result').innerHTML =
+    '<div class="parse-head"><div class="parse-src">' + source + '</div>' +
+      '<div class="parse-stat">' +
+        (amb.length ? '<b class="warn">' + amb.length + ' 个字段要你确认</b>'
+                    : '<b class="ok">字段都能确定</b>') +
+        '<span class="hint"> · 关键字段 ' + keyN + '/4</span>' +
+      '</div></div>' +
+    (whole ? '<div class="whole-note">' + whole + '</div>' : '') +
+    '<div class="fields">' + rows + '</div>' +
+    how +
+    '<div class="paste-actions"><button id="btn-commit" class="btn-primary">确认并加进雷达</button>' +
+      '<span class="hint">没确认的字段不会被当成确定值</span></div>';
+
+  if(/how=1/.test(location.search)){
+    const hd = $('#paste-result').querySelector('details.ai-how');
+    if(hd) hd.open = true;
+  }
+
+  $('#paste-result').querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const k = inp.dataset.k, raw = inp.value.trim();
+      if(raw === ''){ pasteVals[k] = null; return; }
+      pasteVals[k] = (k === 'qty' || k === 'amount_usd' || k === 'unit_price_usd')
+        ? Number(raw.replace(/,/g, '')) : raw;
+    });
+  });
+
+  $('#paste-result').querySelectorAll('.chip.sug').forEach(b => {
+    b.addEventListener('click', () => {
+      const inp = $('#paste-result').querySelector('input[data-k="promised_date"]');
+      if(inp) inp.value = b.dataset.sug;
+      pasteVals.promised_date = b.dataset.sug;
+      b.textContent = '已改用 ' + b.dataset.sug;
+      b.disabled = true;
+    });
+  });
+
+  $('#btn-commit').addEventListener('click', commitOrder);
+}
+
+function commitOrder(){
+  if(!pasteVals) return;
+  const missing = ['qty','amount_usd','promised_date','payment_term']
+    .filter(k => pasteVals[k] == null);
+  if(missing.length >= 3){
+    alert('关键字段缺太多，这条更像询价，不像订单。先向客户确认数量和交期。');
+    return;
+  }
+  const id = 'NEW-' + String(Date.now()).slice(-6);
+  const promised = pasteVals.promised_date || DATA.as_of;
+  DATA.orders.unshift({
+    order_id: id, customer: '(刚录入)', country: '—', product: '—',
+    amount_usd: Number(pasteVals.amount_usd || 0),
+    promised_date: promised, eta: promised,
+    delay_days: 0, days_to_deadline: 0,
+    status: 'yellow', penalty_usd: 0, total_loss_risk_usd: 0,
+    reason: '刚由邮件录入，等待船期数据', action: '盯住：确认船期后回填 ETA'
+  });
+  DATA.summary.total = DATA.orders.length;
+  DATA.summary.yellow = DATA.orders.filter(o => o.status === 'yellow').length;
+  alert('已加进雷达：' + id + '。真实版本这里会写进订单表并开始跟踪。');
+  switchView('overview');
+}
+
+function switchView(v, push){
+  current = v;
+  if(push !== false){ try{ history.replaceState(null,'','#'+v); }catch(e){} }
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('on', b.dataset.view === v));
+  ['overview','detail','brief','paste'].forEach(k => {
+    $('#view-' + k).classList.toggle('hidden', k !== v);
+  });
+  if(v === 'overview') renderOverview();
+  if(v === 'detail') renderDetail();
+  if(v === 'brief') renderBrief();
+  if(v === 'paste') renderPaste();
+  const vw = $('#view-' + v);
+  if(vw){ vw.classList.remove('anim'); void vw.offsetWidth; vw.classList.add('anim'); }
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+document.querySelectorAll('nav button').forEach(b => {
+  b.addEventListener('click', () => switchView(b.dataset.view));
+});
+
+renderHeader();
+const _startView = (location.hash || '').replace('#','') || 'overview';
+if(_startView === 'detail' && !focusId){
+  const _r = (DATA.orders || []).find(x => x.status === 'red');
+  focusId = _r ? _r.order_id : null;
+}
+switchView(['overview','detail','brief','paste'].includes(_startView) ? _startView : 'overview');
+</script>
+</body>
+</html>
